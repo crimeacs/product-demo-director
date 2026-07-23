@@ -69,6 +69,7 @@ test-results/
 *.mpeg
 *.mxf
 *.gif
+!docs/assets/product-demo-director-demo.gif
 *.har
 *.cast
 artifacts/
