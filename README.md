@@ -17,8 +17,6 @@ narration, direct a full-frame edit, render, finish, and verify the delivery.
 It's a [Claude Code](https://claude.com/claude-code) skill (see [`SKILL.md`](./SKILL.md)) and a
 standalone pipeline — drive it by hand or hand the whole loop to an agent.
 
-[▶ Watch the one-minute announcement with sound](https://github.com/crimeacs/product-demo-director/releases/latest)
-
 [![Codex turns product evidence into a directed, source-bound demo](docs/assets/product-demo-director-demo.gif)](https://github.com/crimeacs/product-demo-director/releases/latest)
 
 ### Why it is different
