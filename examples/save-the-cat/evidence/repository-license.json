@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "claimId": "mit-open-source",
+  "status": "verified",
+  "statement": "Repository-owned Product Demo Director code is distributed under the MIT License. Third-party dependencies retain their own terms.",
+  "canonicalLicense": "LICENSE",
+  "canonicalLicenseSha256": "9c53b1803c7ab1cfc8b2f057261260c15d2b9549c3ea0d6e221099229b642ced",
+  "thirdPartyNotices": "THIRD_PARTY_NOTICES.md",
+  "thirdPartyNoticesSha256": "613e54e87d7b88073d79d8a1a85f40bbbf568dbd22179dfaf060d78e1a3b2a47"
+}

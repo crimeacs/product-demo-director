@@ -1,0 +1,22 @@
+{
+  "name": "product-demo-director-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remotion motion engine for Product Demo Director — props-driven single-focus product-story timeline.",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render Timeline out/demo.mp4 --props=public/props.json --concurrency=2",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.496",
+    "@remotion/google-fonts": "4.0.496",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "remotion": "4.0.496"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "typescript": "^5.0.0"
+  }
+}

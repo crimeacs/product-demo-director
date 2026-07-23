@@ -1,0 +1,20 @@
+{
+  "name": "Product Demo Director",
+  "demoFormat": "launch-film",
+  "oneLiner": "An open-source video pipeline that lets Claude Code or Codex turn a product brief, brand, verified claims, and raw footage into a narrated, edited, QA-verified demo.",
+  "audience": "founders and product teams who have screen recordings but not a publishable product story",
+  "inputs": [
+    "product brief",
+    "brand",
+    "verified claims",
+    "raw footage or a capturable URL"
+  ],
+  "agentRole": "Claude Code or Codex inspects the evidence, writes the story contract, captures missing states, generates voice and music, directs the edit, renders the artifact, and runs deterministic QA.",
+  "outputs": [
+    "finished MP4",
+    "exact-frame build plan",
+    "artifact hash and source bindings",
+    "deterministic QA report"
+  ],
+  "transformation": "raw recording in; directed, source-bound product story out"
+}

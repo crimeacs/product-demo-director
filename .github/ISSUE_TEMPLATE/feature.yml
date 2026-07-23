@@ -1,0 +1,65 @@
+name: Feature request
+description: Propose a focused improvement to the director, engine, capture tools, or verification.
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Strong proposals begin with the product-film problem, not only an implementation. Open an
+        issue before investing in a large change.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is difficult or impossible today, and who encounters it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the observable result without prescribing an implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: If you have an implementation in mind, describe its scope and tradeoffs.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What can users do today, and why is it insufficient?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Story and production contracts
+        - Capture and source evidence
+        - Narration, music, or sound
+        - Remotion editing and motion
+        - Build, finishing, and QA
+        - CLI and agent integration
+        - Documentation and contributor experience
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to help implement or test this feature.
+          required: false

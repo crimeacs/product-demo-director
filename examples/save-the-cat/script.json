@@ -1,0 +1,376 @@
+{
+  "fps": 30,
+  "voiceId": "JBFqnCBsd6RMkjVDRZzb",
+  "voice_settings": {
+    "stability": 0.24,
+    "similarity_boost": 0.86,
+    "style": 0.72,
+    "use_speaker_boost": true,
+    "speed": 1.2
+  },
+  "narration": {
+    "file": "audio/master.mp3",
+    "timingFile": "audio/master-timing.json",
+    "model": "eleven_v3",
+    "voiceId": "JBFqnCBsd6RMkjVDRZzb",
+    "fromMap": true,
+    "volume": 1,
+    "sha256": "a5a85c916bf04567ed9da5690d3107ca36f390d7ffe8edac5d3f15d22de03a72",
+    "expectedDurationSec": 57.92,
+    "durationToleranceSec": 0.05,
+    "timingSha256": "1b30bafef4b1e409d56a1322e91b24f56fd7df2fc4d113e395c638c8ff00d825",
+    "timingSource": "elevenlabs-character-alignment"
+  },
+  "narrationMap": [
+    {
+      "id": "buried-value",
+      "shotN": 1,
+      "beat": "the screen recording preserves facts but buries meaning",
+      "text": "Screen recordings preserve every click, yet bury the reason to care.",
+      "startSec": 0.0,
+      "endSec": 4.16,
+      "sourceCharStart": 0,
+      "sourceCharEnd": 68,
+      "timingSource": "elevenlabs-character-alignment"
+    },
+    {
+      "id": "open-source",
+      "shotN": 2,
+      "beat": "announce the release",
+      "text": "Product Demo Director is now open source.",
+      "startSec": 4.39,
+      "endSec": 7.68,
+      "sourceCharStart": 70,
+      "sourceCharEnd": 111,
+      "timingSource": "elevenlabs-character-alignment"
+    },
+    {
+      "id": "definition",
+      "shotN": 3,
+      "beat": "define the product and the agent role",
+      "text": "Inside your repo, Claude Code or Codex turns raw footage into a product film you can trust and ship.",
+      "startSec": 7.92,
+      "endSec": 15.32,
+      "sourceCharStart": 113,
+      "sourceCharEnd": 213,
+      "timingSource": "elevenlabs-character-alignment"
+    },
+    {
+      "id": "story-contract",
+      "shotN": 4,
+      "beat": "bind inputs and write the story",
+      "text": "Give it a brief, brand, claims, and footage. The agent finds the change and writes the source-bound story.",
+      "startSec": 15.552,
+      "endSec": 23.2,
+      "sourceCharStart": 215,
+      "sourceCharEnd": 321,
+      "timingSource": "elevenlabs-character-alignment"
+    },
+    {
+      "id": "production",
+      "shotN": 5,
+      "beat": "direct the production",
+      "text": "Then it creates the voice and music, directs the edit, and renders.",
+      "startSec": 23.44,
+      "endSec": 27.92,
+      "sourceCharStart": 323,
+      "sourceCharEnd": 390,
+      "timingSource": "elevenlabs-character-alignment"
+    },
+    {
+      "id": "verification",
+      "shotN": 6,
+      "beat": "verify the exact file",
+      "text": "Deterministic QA binds the exact MP4 to its sources and checks every frame, sound, color, black, and silence.",
+      "startSec": 28.151,
+      "endSec": 37.44,
+      "sourceCharStart": 392,
+      "sourceCharEnd": 501,
+      "timingSource": "elevenlabs-character-alignment"
+    },
+    {
+      "id": "receipts",
+      "shotN": 7,
+      "beat": "ship proof with the film",
+      "text": "Every delivery includes its build plan, artifact hash, and QA report.",
+      "startSec": 37.707,
+      "endSec": 43.519,
+      "sourceCharStart": 503,
+      "sourceCharEnd": 572,
+      "timingSource": "elevenlabs-character-alignment"
+    },
+    {
+      "id": "release-cta",
+      "shotN": 8,
+      "beat": "invite the viewer to use the open-source repo",
+      "text": "Our code is MIT licensed. Clone the repo, and point Codex at your product.",
+      "startSec": 43.76,
+      "endSec": 49.76,
+      "sourceCharStart": 574,
+      "sourceCharEnd": 648,
+      "timingSource": "elevenlabs-character-alignment"
+    },
+    {
+      "id": "final-image",
+      "shotN": 9,
+      "beat": "resolve on the transformed promise",
+      "text": "Ship the story your screen recording buried. The repository is yours. Make every click carry a reason to care.",
+      "startSec": 50.032,
+      "endSec": 57.92,
+      "sourceCharStart": 650,
+      "sourceCharEnd": 760,
+      "timingSource": "elevenlabs-character-alignment"
+    }
+  ],
+  "music": "cinematic open-source product launch, restrained pulse, warm analog synth, crisp modern percussion, curiosity into confident release, no vocals, continuous bed with a real ending",
+  "musicVolume": 0.14,
+  "musicFadeOutSec": 0.6,
+  "production": {
+    "profile": "announcement",
+    "storyFramework": "save-the-cat",
+    "hardMaxSec": 60,
+    "productBySec": 7,
+    "maxCardRatio": 0.25,
+    "ctaMaxSec": 13,
+    "requireClaimEvidence": true,
+    "singleFocus": true,
+    "requireContinuityIds": true,
+    "requireNarrationMap": true,
+    "requireNarrationMapCoverage": true,
+    "narrationCutPolicy": "between-thoughts",
+    "autoPaceNarration": true,
+    "narrationCutPaddingSec": 0.04,
+    "narrationBoundaryToleranceSec": 0.05,
+    "minNarrationTailSec": 0.75,
+    "enforceSameScreenContinuity": true,
+    "maxZoomScale": 1.9,
+    "maxConnectedZoomGapSec": 1.5,
+    "sourceManifests": [
+      "_src/pdd-raw-terminal.json",
+      "_src/pdd-directed-terminal.json",
+      "_src/codex-workbench.json",
+      "_src/pdd-release-terminal.json"
+    ],
+    "qa": {
+      "blackMinSec": 0.2,
+      "targetLufs": -18,
+      "lufsTolerance": 1,
+      "maxTruePeakDbtp": -1.5,
+      "allowedBlackRanges": []
+    }
+  },
+  "editorialContract": {
+    "targetRuntimeSec": 60.0,
+    "runtimeToleranceSec": 0,
+    "narrationPaced": true,
+    "narrationPacingFps": 30
+  },
+  "claims": [
+    {
+      "id": "mit-open-source",
+      "status": "approved",
+      "evidence": [
+        "evidence/repository-license.json"
+      ]
+    },
+    {
+      "id": "agent-run-delivery",
+      "status": "approved",
+      "evidence": [
+        "evidence/verified-capabilities.json"
+      ]
+    }
+  ],
+  "shots": [
+    {
+      "n": 1,
+      "kind": "clip",
+      "src": "pdd-raw.webm",
+      "inSec": 0,
+      "durSec": 4.266666666666667,
+      "caption": "RAW SCREEN RECORDING",
+      "sourceType": "product",
+      "liveState": false,
+      "continuityId": "repo-terminal",
+      "stateId": "raw",
+      "storyBeats": [
+        "opening-image",
+        "theme-stated",
+        "setup"
+      ],
+      "transition": "cut",
+      "zooms": [
+        {
+          "atSec": 0.2,
+          "durSec": 4.0,
+          "scale": 1.17,
+          "focusX": 50,
+          "focusY": 48
+        }
+      ]
+    },
+    {
+      "n": 2,
+      "kind": "title",
+      "durSec": 3.533333333333333,
+      "eyebrow": "AVAILABLE NOW",
+      "title": "Product Demo Director is open source.",
+      "subtitle": "Repository code: MIT \u00b7 built for Claude Code and Codex",
+      "storyBeat": "catalyst",
+      "claimIds": [
+        "mit-open-source"
+      ],
+      "transition": "cut",
+      "accent": "impact"
+    },
+    {
+      "n": 3,
+      "kind": "clip",
+      "src": "codex-workbench.webm",
+      "inSec": 0,
+      "durSec": 7.7,
+      "caption": "CODEX DRIVES INSIDE THE REPO",
+      "sourceType": "generated",
+      "liveState": false,
+      "actor": "agent",
+      "actionRisk": "low-friction",
+      "continuityId": "codex-workbench",
+      "stateId": "prompt-and-inputs",
+      "storyBeats": [
+        "debate",
+        "break-into-two"
+      ],
+      "transition": "cut"
+    },
+    {
+      "n": 4,
+      "kind": "clip",
+      "src": "codex-workbench.webm",
+      "inSec": 8.8,
+      "durSec": 7.9,
+      "caption": "STORY, BOUND TO SOURCES",
+      "sourceType": "generated",
+      "liveState": false,
+      "actor": "agent",
+      "actionRisk": "low-friction",
+      "continuityId": "codex-workbench",
+      "stateId": "story-and-capture",
+      "transitionReason": "Codex advances from bound inputs to the story and capture plan.",
+      "storyBeats": [
+        "b-story",
+        "fun-and-games"
+      ],
+      "transition": "cut",
+      "accent": "data_tick"
+    },
+    {
+      "n": 5,
+      "kind": "clip",
+      "src": "codex-workbench.webm",
+      "inSec": 18.2,
+      "durSec": 4.7,
+      "caption": "VOICE TIMING \u2192 CUT TIMING",
+      "sourceType": "generated",
+      "liveState": false,
+      "actor": "agent",
+      "actionRisk": "low-friction",
+      "continuityId": "codex-workbench",
+      "stateId": "directed-edit",
+      "transitionReason": "The story becomes a narration-paced live edit.",
+      "storyBeat": "midpoint",
+      "transition": "cut",
+      "accent": "confirm_cash"
+    },
+    {
+      "n": 6,
+      "kind": "clip",
+      "src": "codex-workbench.webm",
+      "inSec": 27,
+      "durSec": 9.566666666666666,
+      "caption": "STRICT QA \u00b7 EXACT FINAL FILE",
+      "sourceType": "generated",
+      "liveState": false,
+      "actor": "agent",
+      "actionRisk": "low-friction",
+      "continuityId": "codex-workbench",
+      "stateId": "verified",
+      "transitionReason": "The render becomes an artifact-bound verified delivery.",
+      "storyBeat": "bad-guys-close-in",
+      "claimIds": [
+        "agent-run-delivery"
+      ],
+      "transition": "cut",
+      "accent": "success_chime"
+    },
+    {
+      "n": 7,
+      "kind": "clip",
+      "src": "codex-workbench.webm",
+      "inSec": 33.7,
+      "durSec": 6.033333333333333,
+      "caption": "DELIVERY RECEIPTS INCLUDED",
+      "sourceType": "generated",
+      "liveState": false,
+      "actor": "agent",
+      "actionRisk": "low-friction",
+      "continuityId": "codex-workbench",
+      "stateId": "delivery",
+      "transitionReason": "The verified result resolves into its reproducible delivery packet.",
+      "storyBeat": "all-is-lost",
+      "claimIds": [
+        "agent-run-delivery"
+      ],
+      "transition": "cut",
+      "accent": "click"
+    },
+    {
+      "n": 8,
+      "kind": "clip",
+      "src": "pdd-release.webm",
+      "inSec": 0.08,
+      "durSec": 6.266666666666667,
+      "caption": "REPOSITORY CODE: MIT \u00b7 CLONE AND RUN",
+      "sourceType": "product",
+      "liveState": false,
+      "actor": "agent",
+      "actionRisk": "low-friction",
+      "continuityId": "release-terminal",
+      "stateId": "clone",
+      "storyBeats": [
+        "dark-night-of-the-soul",
+        "break-into-three"
+      ],
+      "claimIds": [
+        "mit-open-source"
+      ],
+      "transition": "cut",
+      "accent": "confirm_cash",
+      "zooms": [
+        {
+          "atSec": 0.25,
+          "durSec": 5.8,
+          "scale": 1.12,
+          "focusX": 50,
+          "focusY": 49
+        }
+      ]
+    },
+    {
+      "n": 9,
+      "kind": "cta",
+      "durSec": 10.033333333333333,
+      "eyebrow": "REPOSITORY CODE: MIT \u00b7 AVAILABLE NOW",
+      "title": "Ship the story your screen recording buried.",
+      "subtitle": "github.com/crimeacs/product-demo-director",
+      "storyBeats": [
+        "finale",
+        "final-image"
+      ],
+      "claimIds": [
+        "mit-open-source"
+      ],
+      "transition": "cut",
+      "accent": "click"
+    }
+  ]
+}

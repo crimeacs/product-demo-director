@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Generate a music bed sized to the timeline — ElevenLabs Music or Google Lyria 3,
+auto-selected by key.
+
+    python tools/music.py --project projects/my-demo   ->  <project>/music.mp3
+    python tools/music.py --project projects/my-demo --provider lyria
+
+The mood comes from script.json "music" (a short prompt). Length is taken from a
+generated/supplied narration master, then the per-shot VO manifest, else the sum of
+shot durations. ElevenLabs renders the exact length (cap 300s); Lyria renders a
+~30s clip which is crossfade-looped up to the needed length.
+
+Env: ELEVENLABS_API_KEY and/or GEMINI_API_KEY (or GOOGLE_API_KEY).
+     LYRIA_MODEL overrides the Lyria model (default lyria-3-clip-preview).
+"""
+import argparse, base64, json, os, re, subprocess, tempfile, requests
+
+DEFAULT_MOOD = ("calm confident minimal corporate underscore, sparse piano, soft low pulse, "
+                "steady forward motion, no drums, no risers")
+BED_SUFFIX = (" Instrumental only, no vocals, even loudness suitable as a background bed under a voiceover."
+              " Keep musical audio active through the requested duration; do not fade out or leave a silent tail.")
+
+
+def _duration(path):
+    return float(subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+        capture_output=True, text=True,
+    ).stdout.strip() or 0)
+
+
+def _last_trailing_silence(text, duration, tolerance=0.25):
+    starts = [float(x) for x in re.findall(r"silence_start:\s*([0-9.]+)", text)]
+    ends = [float(x) for x in re.findall(r"silence_end:\s*([0-9.]+)", text)]
+    if not starts or not ends or ends[-1] < duration - tolerance:
+        return None
+    start = starts[-1]
+    return start if duration - start >= 0.7 else None
+
+
+def ensure_audible_timeline_tail(path, requested_seconds, reserve_seconds=2.5):
+    """Repair model-generated beds that stop musically before the picture ends.
+
+    Music generation asks for a small reserve past the authored timeline. Some providers return a
+    full-length container whose last 2–4 seconds are silent. When that silence reaches the picture,
+    crossfade a stable mid-track passage into the tail; the Remotion timeline still owns the final
+    authored fade.
+    """
+    duration = _duration(path)
+    if duration < 6:
+        return False
+    detected = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-af",
+         "silencedetect=n=-48dB:d=0.7", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    silence_start = _last_trailing_silence(detected.stderr, duration)
+    timeline_end = max(0.0, min(duration, float(requested_seconds)) - reserve_seconds)
+    if silence_start is None or silence_start >= timeline_end + 0.5:
+        return False
+
+    crossfade = 0.5
+    splice_at = max(1.0, min(silence_start - 0.75, timeline_end - 2.5))
+    insert_seconds = max(3.0, float(requested_seconds) - splice_at + crossfade)
+    latest_sample = max(1.0, splice_at - insert_seconds - 1.0)
+    sample_start = min(max(1.0, duration * 0.33), latest_sample)
+    sample_end = min(duration, sample_start + insert_seconds)
+    if sample_end - sample_start < insert_seconds - 0.1:
+        raise SystemExit("music has an early silent tail and no long enough passage to repair it")
+
+    handle = tempfile.NamedTemporaryFile(suffix=".mp3", dir=os.path.dirname(path) or ".", delete=False)
+    repaired = handle.name
+    handle.close()
+    try:
+        graph = (
+            f"[0:a]atrim=0:{splice_at:.3f},asetpts=PTS-STARTPTS[a];"
+            f"[0:a]atrim={sample_start:.3f}:{sample_end:.3f},asetpts=PTS-STARTPTS[b];"
+            f"[a][b]acrossfade=d={crossfade}:c1=tri:c2=tri,"
+            f"atrim=0:{float(requested_seconds):.3f}[out]"
+        )
+        subprocess.run([
+            "ffmpeg", "-y", "-v", "error", "-i", path, "-filter_complex", graph,
+            "-map", "[out]", "-c:a", "libmp3lame", "-b:a", "192k", repaired,
+        ], check=True)
+        os.replace(repaired, path)
+    finally:
+        if os.path.exists(repaired):
+            os.unlink(repaired)
+    return True
+
+
+def target_seconds(args, script):
+    total = sum(float(s.get("durSec", 0)) for s in script.get("shots", []))
+    narration = script.get("narration") if isinstance(script.get("narration"), dict) else {}
+    master = narration.get("file")
+    if master:
+        path = master if os.path.isabs(str(master)) else os.path.join(args.project, str(master))
+        if os.path.exists(path):
+            duration = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                capture_output=True, text=True,
+            ).stdout.strip()
+            if duration:
+                total = max(total, float(duration) + float(narration.get("startsAtSec", 0)))
+        return total + 2.5
+    man = os.path.join(args.project, "audio", "manifest.json")
+    if os.path.exists(man):
+        total = max(total, sum(m["seconds"] for m in json.load(open(man))))
+    return total + 2.5
+
+
+def gen_elevenlabs(prompt, seconds, out):
+    key = os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("ELEVEN_API_KEY")
+    length_ms = min(300000, int(round(seconds * 1000)) or 30000)
+    r = requests.post(
+        "https://api.elevenlabs.io/v1/music",
+        headers={"xi-api-key": key, "Content-Type": "application/json"},
+        json={"prompt": prompt, "music_length_ms": length_ms},
+        timeout=300,
+    )
+    if r.status_code >= 300:
+        raise SystemExit(f"FAILED {r.status_code}: {r.text[:200]}")
+    open(out, "wb").write(r.content)
+
+
+def gen_lyria(prompt, seconds, out):
+    key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    model = os.environ.get("LYRIA_MODEL", "lyria-3-clip-preview")
+    r = requests.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}",
+        json={"contents": [{"parts": [{"text": prompt}]}],
+              "generationConfig": {"responseModalities": ["AUDIO"]}},
+        timeout=300,
+    )
+    if r.status_code >= 300:
+        raise SystemExit(f"FAILED {r.status_code}: {r.text[:200]}")
+    try:
+        parts = r.json()["candidates"][0]["content"]["parts"]
+        data = next(p["inlineData"] for p in parts if "inlineData" in p)
+    except (KeyError, IndexError, StopIteration):
+        raise SystemExit(f"FAILED no audio in response: {r.text[:200]}")
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
+        tf.write(base64.b64decode(data["data"])); clip = tf.name
+    try:
+        dur = float(subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", clip],
+            capture_output=True, text=True).stdout.strip() or 0)
+        if dur >= seconds:
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", clip, "-t", f"{seconds:.2f}",
+                            "-c:a", "libmp3lame", "-b:a", "192k", out], check=True)
+        else:
+            # crossfade-loop the clip up to length: each pass appends (dur - 2s) more
+            loops = clip
+            have = dur
+            while have < seconds:
+                nxt = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False).name
+                subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", loops, "-i", clip,
+                                "-filter_complex", "acrossfade=d=2:c1=tri:c2=tri",
+                                "-c:a", "libmp3lame", "-b:a", "192k", nxt], check=True)
+                if loops != clip:
+                    os.unlink(loops)
+                loops = nxt
+                have += dur - 2
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", loops, "-t", f"{seconds:.2f}",
+                            "-af", f"afade=t=out:st={seconds-1.5:.2f}:d=1.5",
+                            "-c:a", "libmp3lame", "-b:a", "192k", out], check=True)
+            if loops != clip:
+                os.unlink(loops)
+    finally:
+        os.unlink(clip)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--project", required=True)
+    ap.add_argument("--provider", choices=["auto", "elevenlabs", "lyria"], default="auto")
+    args = ap.parse_args()
+
+    have_eleven = bool(os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("ELEVEN_API_KEY"))
+    have_gemini = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+    provider = args.provider
+    if provider == "auto":
+        provider = "elevenlabs" if have_eleven else ("lyria" if have_gemini else "")
+    if provider == "elevenlabs" and not have_eleven:
+        raise SystemExit("set ELEVENLABS_API_KEY")
+    if provider == "lyria" and not have_gemini:
+        raise SystemExit("set GEMINI_API_KEY")
+    if not provider:
+        raise SystemExit("set ELEVENLABS_API_KEY or GEMINI_API_KEY")
+
+    script = json.load(open(os.path.join(args.project, "script.json")))
+    prompt = (script.get("music") or DEFAULT_MOOD)[:480] + BED_SUFFIX
+    seconds = target_seconds(args, script)
+    out = os.path.join(args.project, "music.mp3")
+    (gen_elevenlabs if provider == "elevenlabs" else gen_lyria)(prompt, seconds, out)
+    repaired = ensure_audible_timeline_tail(out, seconds)
+    dur = f"{_duration(out):.6f}"
+    if repaired:
+        print("music: repaired provider's early silent outro with a crossfaded tail")
+    print(f"music ({provider}): {os.path.getsize(out)//1024}KB, {dur}s (asked {seconds:.1f}s)")
+
+
+if __name__ == "__main__":
+    main()

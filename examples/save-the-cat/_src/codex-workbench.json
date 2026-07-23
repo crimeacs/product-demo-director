@@ -1,0 +1,197 @@
+{
+  "title": "Codex · product-demo-director",
+  "prompt": "Turn this repository into a one-minute open-source announcement. Explain what it is, show me driving it, and use only verified claims.",
+  "phases": [
+    {
+      "label": "YOU ASK · CODEX DIRECTS",
+      "mode": "inputs",
+      "focus": "agent",
+      "stage": 0,
+      "durationMs": 4500,
+      "message": "I’ll treat the repository as production evidence, not as a feature-tour script.",
+      "tool": "Plan(announcement film)\nInspect(repository state)",
+      "result": "One audience · one change · one release promise",
+      "files": [
+        "README.md",
+        "SKILL.md",
+        "tools/",
+        "examples/"
+      ],
+      "steps": [
+        "AUDIENCE · builders with raw product footage",
+        "PROBLEM · clicks without a reason to care",
+        "CHANGE · evidence becomes a directed story"
+      ],
+      "cursor": [
+        34,
+        43
+      ]
+    },
+    {
+      "label": "INPUTS · SOURCE BOUND",
+      "mode": "inputs",
+      "focus": "balanced",
+      "stage": 0,
+      "durationMs": 4500,
+      "message": "First I’ll bind the brief, brand, claims, footage, and repository license.",
+      "tool": "Read(product.json · brand.json · verified-capabilities.json)\nProbe(pdd-raw.webm)\nRead(LICENSE)",
+      "result": "All public claims resolve to local evidence",
+      "files": [
+        "product.json",
+        "brand.json",
+        "evidence/verified-capabilities.json",
+        "LICENSE"
+      ],
+      "steps": [
+        "PRODUCT BRIEF · what it is and who it serves",
+        "BRAND · typography, palette, release CTA",
+        "VERIFIED CLAIMS · no invented outcomes",
+        "RAW FOOTAGE · repository-native capture"
+      ],
+      "cursor": [
+        74,
+        42
+      ]
+    },
+    {
+      "label": "STORY · ONE CHANGE",
+      "mode": "script",
+      "focus": "balanced",
+      "stage": 1,
+      "durationMs": 5000,
+      "message": "The story is simple: raw evidence becomes a film people can understand and trust.",
+      "tool": "Write(script.json)\nPreflight(story · claims · continuity)",
+      "result": "9 full-frame beats · 0 split screens",
+      "files": [
+        "product.json",
+        "brand.json",
+        "+ script.json"
+      ],
+      "steps": [
+        "HOOK · the reason to care is buried",
+        "CHANGE · Codex directs inside the repo",
+        "PROOF · the exact delivery is verified"
+      ],
+      "cursor": [
+        77,
+        43
+      ]
+    },
+    {
+      "label": "CAPTURE · ONLY WHAT THE STORY NEEDS",
+      "mode": "inputs",
+      "focus": "agent",
+      "stage": 2,
+      "durationMs": 4500,
+      "message": "I’ll capture the missing repository states and keep every source reproducible.",
+      "tool": "term.py · repository takes\nworkbench.py · curated agent replay",
+      "result": "Raw terminal · agent direction · delivery proof",
+      "files": [
+        "+ assets/pdd-raw.webm",
+        "+ assets/codex-workbench.webm"
+      ],
+      "steps": [
+        "RAW STATE · story missing",
+        "AGENT STATE · story and edit in motion",
+        "PROOF STATE · artifact-bound delivery"
+      ],
+      "cursor": [
+        35,
+        54
+      ]
+    },
+    {
+      "label": "EDIT · MEANING CONTROLS THE CUT",
+      "mode": "edit",
+      "focus": "balanced",
+      "stage": 3,
+      "durationMs": 5500,
+      "message": "ElevenLabs returns character timing, so picture cuts move between complete thoughts.",
+      "tool": "vo.py · ElevenLabs timestamps\npace.py · thought-safe frames\nbuild.py --contracts strict",
+      "result": "Full-frame shots · connected zooms · narration-safe cuts",
+      "files": [
+        "+ audio/master.mp3",
+        "+ audio/master-timing.json",
+        "+ build-plan.json"
+      ],
+      "previewSrc": "../assets/pdd-directed.webm",
+      "previewLabel": "DIRECTED REPOSITORY TAKE",
+      "cursor": [
+        76,
+        53
+      ]
+    },
+    {
+      "label": "RENDER · EXACT TIMELINE",
+      "mode": "render",
+      "focus": "preview",
+      "stage": 4,
+      "durationMs": 4000,
+      "message": "The edit becomes one artifact-bound delivery master.",
+      "tool": "build.py · Remotion\nfinish.py · BT.709 and loudness",
+      "result": "demo-final.mp4 · 60.000 s · 1800 frames",
+      "files": [
+        "+ demo-final.mp4",
+        "+ build-plan.json",
+        "+ artifact.json"
+      ],
+      "cursor": [
+        78,
+        50
+      ]
+    },
+    {
+      "label": "VERIFY · THE FILE THAT SHIPS",
+      "mode": "qa",
+      "focus": "preview",
+      "stage": 5,
+      "durationMs": 5000,
+      "message": "Strict QA checks the bound final file, including every narration boundary.",
+      "tool": "qa.py --require-artifact --strict",
+      "result": "STRICT QA PASS · 0 issues",
+      "files": [
+        "demo-final.mp4",
+        "artifact.json",
+        "+ qa-report.json"
+      ],
+      "steps": [
+        "60.000 s · runtime",
+        "1800 · exact frames",
+        "-18.0 LUFS · audio",
+        "BT.709 · web color",
+        "0 · thought cuts",
+        "0 · delivery issues"
+      ],
+      "cursor": [
+        71,
+        52
+      ]
+    },
+    {
+      "label": "DELIVERY · PROVENANCE INCLUDED",
+      "mode": "delivery",
+      "focus": "preview",
+      "stage": 5,
+      "durationMs": 5500,
+      "message": "The film ships with the receipts needed to reproduce and trust it.",
+      "tool": "Publish(release asset + receipts)",
+      "result": "Finished film · exact plan · source binding · QA proof",
+      "files": [
+        "demo-final.mp4",
+        "build-plan.json",
+        "artifact.json",
+        "qa-report.json"
+      ],
+      "steps": [
+        "demo-final.mp4 · finished film",
+        "build-plan.json · exact frames",
+        "artifact.json · source bindings",
+        "qa-report.json · delivery proof"
+      ],
+      "cursor": [
+        72,
+        50
+      ]
+    }
+  ]
+}

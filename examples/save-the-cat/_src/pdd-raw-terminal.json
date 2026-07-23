@@ -1,0 +1,30 @@
+[
+  {
+    "role": "user",
+    "text": "Walk me through the Product Demo Director repo."
+  },
+  {
+    "role": "tool",
+    "text": "Bash(rg --files | sort)"
+  },
+  {
+    "role": "res",
+    "text": "README.md · SKILL.md · product.json · brand.json"
+  },
+  {
+    "role": "res",
+    "text": "tools/vo.py · tools/music.py · tools/build.py · tools/qa.py"
+  },
+  {
+    "role": "res",
+    "text": "engine/src/Timeline.tsx · examples/ · tests/"
+  },
+  {
+    "role": "say",
+    "text": "The product works. But this is still one long screen recording."
+  },
+  {
+    "role": "fin",
+    "text": "Facts captured · story missing"
+  }
+]

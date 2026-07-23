@@ -1,0 +1,34 @@
+[
+  {
+    "role": "user",
+    "text": "git clone https://github.com/crimeacs/product-demo-director.git"
+  },
+  {
+    "role": "res",
+    "text": "Cloning Product Demo Director · repository code: MIT"
+  },
+  {
+    "role": "user",
+    "text": "cd product-demo-director && ./pdd setup"
+  },
+  {
+    "role": "res",
+    "text": "Python · Remotion · FFmpeg · ready"
+  },
+  {
+    "role": "user",
+    "text": "./pdd new projects/launch --name \"Your Product\""
+  },
+  {
+    "role": "res",
+    "text": "Single-focus story · narration-safe edit · strict QA"
+  },
+  {
+    "role": "user",
+    "text": "./pdd demo projects/launch"
+  },
+  {
+    "role": "fin",
+    "text": "Raw evidence in. Directed product story out."
+  }
+]

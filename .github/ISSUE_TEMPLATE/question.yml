@@ -1,0 +1,53 @@
+name: Usage question
+description: Ask for help using Product Demo Director with a public or synthetic example.
+title: "[Question] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the README and docs first. Never upload private footage, credentials, customer
+        data, internal URLs, or unsanitized logs.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to make?
+      description: Describe the intended demo and where you are in the workflow.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Include exact commands and the relevant documentation you followed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: blocker
+    attributes:
+      label: Where are you blocked?
+      description: Share a sanitized error or explain the unexpected behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, repository commit, and relevant tool versions.
+      placeholder: |
+        OS:
+        Commit (`git rev-parse --short HEAD`):
+        Python / Node.js / FFmpeg:
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed credentials, customer data, private footage, internal URLs, and sensitive local paths.
+          required: true

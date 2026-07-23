@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "claimId": "agent-run-delivery",
+  "status": "verified",
+  "statement": "Product Demo Director emits an exact-frame build plan and source-bound artifact, then verifies the finished delivery with deterministic QA.",
+  "sourceFiles": [
+    "tools/build.py",
+    "tools/finish.py",
+    "tools/qa.py"
+  ],
+  "acceptance": [
+    "build.py writes build-plan and artifact manifests",
+    "finish.py preserves frame count while normalizing delivery audio and color",
+    "qa.py requires the bound artifact and checks decode, frames, audio, black, silence, and narration continuity"
+  ]
+}

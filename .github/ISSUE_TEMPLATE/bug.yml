@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a reproducible failure in the CLI, production pipeline, render, or QA.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Product Demo Director. Search existing issues first, and do not
+        upload private footage, credentials, customer data, internal URLs, or unsanitized manifests.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the failure and the user-visible impact.
+      placeholder: The command completed, but the final artifact...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the exact commands and the smallest synthetic or public project that reproduces it.
+      placeholder: |
+        1. Run `./pdd ...`
+        2. Open ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, repository commit, Python, Node.js, npm, and FFmpeg versions.
+      placeholder: |
+        OS:
+        Commit (`git rev-parse --short HEAD`):
+        Python:
+        Node.js / npm:
+        FFmpeg:
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Paste relevant errors, QA findings, or artifact hashes after removing private data.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed credentials, customer data, private footage, internal URLs, and sensitive local paths.
+          required: true
+        - label: I searched existing issues for this problem.
+          required: true

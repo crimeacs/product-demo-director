@@ -1,0 +1,8 @@
+interface:
+  display_name: "Product Demo Director"
+  short_description: "Direct source-bound product films with QA"
+  brand_color: "#46B07C"
+  default_prompt: "Use $product-demo-director to turn my product evidence and footage into a polished, narration-safe announcement film."
+
+policy:
+  allow_implicit_invocation: true

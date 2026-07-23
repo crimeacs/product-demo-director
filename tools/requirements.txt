@@ -1,0 +1,4 @@
+requests==2.34.2
+google-genai==2.8.0
+playwright==1.60.0
+# anthropic is intentionally optional: shoot.py/script.py use the `claude` CLI or Gemini otherwise.

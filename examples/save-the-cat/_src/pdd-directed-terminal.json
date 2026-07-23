@@ -1,0 +1,54 @@
+[
+  {
+    "role": "user",
+    "text": "Turn this raw repo recording into a 60-second launch demo. Use verified claims only."
+  },
+  {
+    "role": "say",
+    "text": "I’ll direct it from source evidence to the exact delivery file."
+  },
+  {
+    "role": "tool",
+    "text": "Read(product.json · brand.json · evidence/ · raw-repo.webm)"
+  },
+  {
+    "role": "res",
+    "text": "Product · brand · claims · footage · all source-bound"
+  },
+  {
+    "role": "tool",
+    "text": "Write(script.json)"
+  },
+  {
+    "role": "res",
+    "text": "9 shots · 60.000 s · full-frame cuts · connected zooms"
+  },
+  {
+    "role": "tool",
+    "text": "Bash(tools/vo.py + tools/music.py · ElevenLabs)"
+  },
+  {
+    "role": "res",
+    "text": "George · eleven_v3 · narrated master + music bed"
+  },
+  {
+    "role": "tool",
+    "text": "Bash(tools/build.py --contracts strict)"
+  },
+  {
+    "role": "res",
+    "text": "9 segments · 60.000 s · 1800 exact frames"
+  },
+  {
+    "role": "tool",
+    "text": "Bash(tools/qa.py --require-artifact --strict)"
+  },
+  {
+    "role": "res",
+    "text": "PASS · -18.0 LUFS · BT.709 · 0 black · 0 silence issues"
+  },
+  {
+    "role": "fin",
+    "text": "demo-final.mp4 · build-plan.json · artifact.json"
+  }
+]

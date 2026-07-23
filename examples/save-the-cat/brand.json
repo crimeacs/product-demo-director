@@ -1,0 +1,22 @@
+{
+  "name": "Product Demo Director",
+  "tagline": "Demos with a plot, and proof.",
+  "url": "github.com/crimeacs/product-demo-director",
+  "tone": "cinematic, truthful, precise",
+  "dark": true,
+  "palette": {
+    "bg": "#0c1310",
+    "ink": "#f4f6f3",
+    "accent": "#46b07c",
+    "accentDeep": "#2f6f4f",
+    "onAccent": "#07100b",
+    "sub": "rgba(244,246,243,0.66)",
+    "line": "rgba(255,255,255,0.10)",
+    "warn": "#e0a24a"
+  },
+  "cta": {
+    "name": "Product Demo ",
+    "accent": "Director",
+    "url": "github.com/crimeacs/product-demo-director"
+  }
+}

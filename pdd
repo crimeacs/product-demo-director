@@ -1,0 +1,367 @@
+#!/usr/bin/env python3
+"""Friendly command-line entry point for Product Demo Director."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+
+ROOT = Path(__file__).resolve().parent
+ENGINE = ROOT / "engine"
+VENV = ROOT / ".venv"
+SKILL_INSTALL_PATHS = {
+    "codex": Path(".agents") / "skills" / "product-demo-director",
+    "claude": Path(".claude") / "skills" / "product-demo-director",
+}
+
+
+def load_dotenv() -> None:
+    """Load the repo's simple KEY=value file without overriding the shell."""
+    path = ROOT / ".env"
+    if not path.exists():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if value[:1] == value[-1:] and value[:1] in {"'", '"'}:
+            value = value[1:-1]
+        if key and value:
+            os.environ.setdefault(key, value)
+
+
+def run(command: list[str], *, cwd: Path = ROOT) -> None:
+    print("+", " ".join(command), flush=True)
+    subprocess.run(command, cwd=cwd, check=True)
+
+
+def venv_python() -> str:
+    candidates = [VENV / "bin" / "python", VENV / "Scripts" / "python.exe"]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    raise SystemExit("Run `./pdd setup` first; .venv is missing.")
+
+
+def cmd_setup(args: argparse.Namespace) -> None:
+    if not VENV.exists():
+        run([sys.executable, "-m", "venv", str(VENV)])
+    py = venv_python()
+    run([py, "-m", "pip", "install", "--upgrade", "pip"])
+    run([py, "-m", "pip", "install", "-r", str(ROOT / "tools" / "requirements.txt")])
+    if not shutil.which("npm"):
+        raise SystemExit("npm was not found. Install Node.js 18 or newer, then rerun setup.")
+    run(["npm", "ci"], cwd=ENGINE)
+    if args.with_capture:
+        run([py, "-m", "playwright", "install", "chromium"])
+    print("\nSetup complete. Run `./pdd doctor` to verify the workstation.")
+
+
+def cmd_doctor(_: argparse.Namespace) -> None:
+    run([sys.executable, str(ROOT / "tools" / "doctor.py")])
+
+
+def cmd_test(_: argparse.Namespace) -> None:
+    py = venv_python()
+    run([py, "-m", "unittest", "discover", "-s", "tests", "-v"])
+    run(["npm", "run", "type-check"], cwd=ENGINE)
+
+
+def _path_exists(path: Path) -> bool:
+    """Return True for regular paths and broken symlinks."""
+    return os.path.lexists(os.fspath(path))
+
+
+def _link_points_to(path: Path, source: Path) -> bool:
+    if not path.is_symlink():
+        return False
+    try:
+        return path.resolve(strict=False) == source.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+
+
+def _assert_parent_can_hold(destination: Path) -> None:
+    """Reject an existing non-directory anywhere in the missing parent chain."""
+    candidate = destination.parent
+    while not _path_exists(candidate):
+        candidate = candidate.parent
+    if not candidate.is_dir():
+        raise SystemExit(
+            f"Refusing to install skill: parent path is not a directory: {candidate}"
+        )
+
+
+def _validate_skill_destination(destination: Path, source: Path) -> str:
+    _assert_parent_can_hold(destination)
+    if not _path_exists(destination):
+        return "create"
+    if _link_points_to(destination, source):
+        return "current"
+    kind = "symlink" if destination.is_symlink() else "path"
+    raise SystemExit(
+        f"Refusing to overwrite unrelated existing {kind}: {destination}"
+    )
+
+
+def cmd_install_skill(args: argparse.Namespace) -> None:
+    source = ROOT.resolve()
+    if not (source / "SKILL.md").is_file():
+        raise SystemExit(f"Cannot install skill: SKILL.md is missing from {source}")
+
+    targets = tuple(SKILL_INSTALL_PATHS) if args.target == "both" else (args.target,)
+    home = Path.home()
+    destinations = [(target, home / SKILL_INSTALL_PATHS[target]) for target in targets]
+
+    # Validate the complete request before mutating either destination.
+    actions = {
+        target: _validate_skill_destination(destination, source)
+        for target, destination in destinations
+    }
+
+    for target, destination in destinations:
+        label = "Codex" if target == "codex" else "Claude Code"
+        if actions[target] == "current":
+            print(f"{label}: already installed at {destination} -> {source}")
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            destination.symlink_to(source, target_is_directory=True)
+        except FileExistsError:
+            # A concurrent installer may have won the race. Only accept our own link.
+            if not _link_points_to(destination, source):
+                raise SystemExit(
+                    f"Refusing to overwrite unrelated existing path: {destination}"
+                )
+        print(f"{label}: installed {destination} -> {source}")
+
+    print("\nSkill ready. Restart the agent app if it was already open.")
+
+
+def cmd_new(args: argparse.Namespace) -> None:
+    project = Path(args.project).expanduser()
+    if not project.is_absolute():
+        project = (ROOT / project).resolve()
+    if project.exists() and any(project.iterdir()):
+        raise SystemExit(f"Refusing to overwrite non-empty directory: {project}")
+    (project / "assets").mkdir(parents=True, exist_ok=True)
+    product_name = args.name or project.name.replace("-", " ").title()
+    script = {
+        "fps": 30,
+        "brand": {"name": product_name, "accent": "Demo"},
+        "production": {
+            "profile": "announcement",
+            "storyFramework": "save-the-cat",
+            "requiredStoryBeats": [
+                "opening-image", "theme-stated", "setup", "catalyst", "debate",
+                "break-into-two", "b-story", "fun-and-games", "midpoint",
+                "bad-guys-close-in", "all-is-lost", "dark-night-of-the-soul",
+                "break-into-three", "finale", "final-image",
+            ],
+            "hardMaxSec": 60,
+            "productBySec": 7,
+            "maxCardRatio": 0.15,
+            "requireLiveProgression": True,
+            "requireClaimEvidence": True,
+            "singleFocus": True,
+            "requireContinuityIds": True,
+            "requireNarrationMap": True,
+            "requireNarrationMapCoverage": True,
+            "narrationCutPolicy": "between-thoughts",
+            "autoPaceNarration": True,
+            "narrationCutPaddingSec": 0.04,
+            "minNarrationTailSec": 0.75,
+        },
+        "editorialContract": {"targetRuntimeSec": 60, "runtimeToleranceSec": 0},
+        "voiceId": "JBFqnCBsd6RMkjVDRZzb",
+        "voice_settings": {"stability": 0.24, "similarity_boost": 0.86,
+                           "style": 0.72, "use_speaker_boost": True},
+        "music": "cinematic product-story pulse, intimate tension into confident release, no vocals",
+        "narration": {
+            "file": "audio/master.mp3",
+            "model": "eleven_v3",
+            "voiceId": "JBFqnCBsd6RMkjVDRZzb",
+            "fromMap": True,
+            "timingFile": "audio/master-timing.json",
+        },
+        "narrationMap": [
+            {"id": "problem", "shotN": 1, "beat": "the useful moment is buried",
+             "text": f"A product can be useful and still disappear inside a flat screen recording. {product_name} deserves a story that makes the change visible."},
+            {"id": "definition", "shotN": 2, "beat": "show the real problem",
+             "text": f"{product_name} is the product in focus. Start by showing the real problem in the real workflow."},
+            {"id": "inputs", "shotN": 3, "beat": "reveal essential states",
+             "text": "Then reveal only the states the audience needs to understand what changes."},
+            {"id": "story", "shotN": 4, "beat": "connect cause and effect",
+             "text": "Show the decisive action in context, so viewers can connect cause and effect."},
+            {"id": "direction", "shotN": 5, "beat": "direct attention",
+             "text": "Use full-frame product shots, motivated cuts, and connected zooms to direct attention without hiding the interface."},
+            {"id": "thought-fit", "shotN": 6, "beat": "meaning controls pacing",
+             "text": "Let every spoken thought own its visual runway, and place every cut between ideas."},
+            {"id": "render", "shotN": 7, "beat": "show product proof",
+             "text": "End on concrete proof from the product, not a summary slide or an unsupported claim."},
+            {"id": "proof", "shotN": 8, "beat": "verify delivery",
+             "text": "Verify the exact final file before you publish it."},
+            {"id": "close", "shotN": 9, "beat": "the transformed outcome",
+             "text": f"{product_name}. One clear problem. One visible change. One reason to care."},
+        ],
+        "shots": [
+            {"n": 1, "kind": "clip", "src": "product.mp4", "inSec": 0,
+             "caption": "THE REASON TO CARE IS BURIED", "durSec": 6,
+             "sourceType": "product", "liveState": True,
+             "continuityId": "product", "stateId": "raw",
+             "storyBeats": ["opening-image", "theme-stated", "setup"]},
+            {"n": 2, "kind": "clip", "src": "product.mp4", "inSec": 6,
+             "caption": f"{product_name.upper()} · THE REAL WORKFLOW", "durSec": 7,
+             "sourceType": "product", "liveState": True, "continuityId": "product",
+             "stateId": "defined", "transitionReason": "the product is identified",
+             "storyBeat": "catalyst", "transition": "cut"},
+            {"n": 3, "kind": "clip", "src": "product.mp4", "inSec": 13,
+             "caption": "ONLY THE STATES THE STORY NEEDS", "durSec": 6,
+             "sourceType": "product", "liveState": True, "continuityId": "product",
+             "stateId": "inputs", "transitionReason": "the inputs are inspected",
+             "storyBeats": ["debate", "break-into-two"], "transition": "cut"},
+            {"n": 4, "kind": "clip", "src": "product.mp4", "inSec": 19,
+             "caption": "CAUSE → EFFECT", "durSec": 8,
+             "sourceType": "product", "liveState": True, "continuityId": "product",
+             "stateId": "story", "transitionReason": "the story contract is written",
+             "storyBeat": "b-story", "transition": "cut",
+             "zooms": [{"atSec": 0.3, "durSec": 6.8, "scale": 1.38, "focusX": 60, "focusY": 44}]},
+            {"n": 5, "kind": "clip", "src": "product.mp4", "inSec": 27,
+             "caption": "FULL-FRAME SHOTS · MOTIVATED MOTION", "durSec": 8,
+             "sourceType": "product", "liveState": True, "continuityId": "product",
+             "stateId": "directed", "transitionReason": "the agent enters the live edit",
+             "storyBeats": ["fun-and-games", "midpoint"], "transition": "cut",
+             "zooms": [
+                 {"atSec": 0.4, "durSec": 3.4, "scale": 1.38, "focusX": 68, "focusY": 38},
+                 {"atSec": 3.8, "durSec": 3.6, "scale": 1.52, "focusX": 36, "focusY": 62}
+             ]},
+            {"n": 6, "kind": "clip", "src": "product.mp4", "inSec": 35,
+             "caption": "CUT BETWEEN IDEAS, NEVER THROUGH THEM", "durSec": 8,
+             "sourceType": "product", "liveState": True, "continuityId": "product",
+             "stateId": "paced", "transitionReason": "narration timing locks picture boundaries",
+             "storyBeat": "bad-guys-close-in", "transition": "cut"},
+            {"n": 7, "kind": "clip", "src": "product.mp4", "inSec": 43,
+             "caption": "SHOW PRODUCT PROOF", "durSec": 7,
+             "sourceType": "product", "liveState": True, "continuityId": "product",
+             "stateId": "rendered", "transitionReason": "the edit becomes a bound artifact",
+             "storyBeats": ["all-is-lost", "dark-night-of-the-soul", "break-into-three"],
+             "transition": "cut"},
+            {"n": 8, "kind": "clip", "src": "product.mp4", "inSec": 50,
+             "caption": "VERIFY THE EXACT FINAL FILE", "durSec": 6,
+             "sourceType": "product", "liveState": True, "continuityId": "product",
+             "stateId": "verified", "transitionReason": "strict QA verifies the delivery",
+             "storyBeat": "finale", "transition": "cut"},
+            {"n": 9, "kind": "cta", "title": f"{product_name}. Make the change visible.",
+             "subtitle": "One clear problem · one visible change · one reason to care", "durSec": 4,
+             "storyBeat": "final-image"},
+        ],
+    }
+    (project / "script.json").write_text(json.dumps(script, indent=2) + "\n", encoding="utf-8")
+    print(f"Created {project}")
+    print(f"Next: add {project / 'assets' / 'product.mp4'}, edit script.json, then run:")
+    print(f"  ./pdd demo {project.relative_to(ROOT) if project.is_relative_to(ROOT) else project}")
+
+
+def pipeline(project_value: str, *, generate: bool, judge: bool) -> None:
+    load_dotenv()
+    py = venv_python()
+    project = Path(project_value).expanduser()
+    if not project.is_absolute():
+        project = (ROOT / project).resolve()
+    if not (project / "script.json").exists():
+        raise SystemExit(f"No script.json found in {project}")
+
+    if generate:
+        run([py, str(ROOT / "tools" / "preflight.py"), "--project", str(project),
+             "--allow-pending-generated-narration"])
+        run([py, str(ROOT / "tools" / "vo.py"), "--project", str(project)])
+        with open(project / "script.json") as handle:
+            generated_script = json.load(handle)
+        production = generated_script.get("production") if isinstance(generated_script.get("production"), dict) else {}
+        if production.get("autoPaceNarration"):
+            run([py, str(ROOT / "tools" / "pace.py"), "--project", str(project), "--write"])
+        run([py, str(ROOT / "tools" / "music.py"), "--project", str(project)])
+    run([py, str(ROOT / "tools" / "preflight.py"), "--project", str(project), "--strict"])
+    run([py, str(ROOT / "tools" / "build.py"), "--project", str(project),
+         "--contracts", "strict"])
+
+    creative = project / "out" / "demo.mp4"
+    final = project / "out" / "demo-final.mp4"
+    run([py, str(ROOT / "tools" / "finish.py"), "--input", str(creative),
+         "--out", str(final), "--require-artifact"])
+    run([py, str(ROOT / "tools" / "qa.py"), "--video", str(final),
+         "--project", str(project), "--require-artifact", "--strict"])
+    if judge:
+        run([py, str(ROOT / "tools" / "judge.py"), "--video", str(final),
+             "--require-artifact", "--fps", "4"])
+    print(f"\nReady: {final}")
+
+
+def cmd_render(args: argparse.Namespace) -> None:
+    pipeline(args.project, generate=False, judge=args.judge)
+
+
+def cmd_demo(args: argparse.Namespace) -> None:
+    pipeline(args.project, generate=True, judge=args.judge)
+
+
+def parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="pdd", description=__doc__)
+    sub = ap.add_subparsers(dest="command", required=True)
+
+    setup = sub.add_parser("setup", help="install Python and Remotion dependencies")
+    setup.add_argument("--with-capture", action="store_true", help="also install Playwright Chromium")
+    setup.set_defaults(func=cmd_setup)
+
+    doctor = sub.add_parser("doctor", help="check local tools, dependencies, keys, and disk space")
+    doctor.set_defaults(func=cmd_doctor)
+
+    test = sub.add_parser("test", help="run Python tests and the TypeScript checker")
+    test.set_defaults(func=cmd_test)
+
+    install_skill = sub.add_parser(
+        "install-skill",
+        help="link this repository as a Codex and/or Claude Code skill",
+    )
+    install_skill.add_argument(
+        "--target",
+        choices=("codex", "claude", "both"),
+        default="both",
+        help="skill host to install for (default: both)",
+    )
+    install_skill.set_defaults(func=cmd_install_skill)
+
+    new = sub.add_parser("new", help="create a starter project")
+    new.add_argument("project", help="new project directory")
+    new.add_argument("--name", default="", help="product name shown in the starter script")
+    new.set_defaults(func=cmd_new)
+
+    for command, help_text, func in (
+        ("render", "render and QA a project whose audio already exists", cmd_render),
+        ("demo", "generate audio, render, finish, and QA a project", cmd_demo),
+    ):
+        item = sub.add_parser(command, help=help_text)
+        item.add_argument("project")
+        item.add_argument("--judge", action="store_true", help="also run the optional AI taste review")
+        item.set_defaults(func=func)
+    return ap
+
+
+def main() -> None:
+    args = parser().parse_args()
+    try:
+        args.func(args)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(exc.returncode) from exc
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "status": "verified",
+  "subject": "Codex-driven Product Demo Director launch film",
+  "disclosure": "The Codex workbench and repo terminals are curated replays built from whitelisted production inputs and verified delivery targets. They are semantically reproducible, but browser and WebM encoders are not guaranteed to produce bit-identical binaries across machines. They are not screenshots of a proprietary agent interface or claims that the real-time Codex UI was recorded.",
+  "inputs": {
+    "rawRepoRecording": {
+      "source": "examples/save-the-cat/_src/pdd-raw-terminal.json",
+      "sourceSha256": "dd92e0d22dea9f242dd01e1ed137c59e25232eaf264d2d695373aef322e211d1",
+      "asset": "examples/save-the-cat/assets/pdd-raw.webm",
+      "sha256": "88ca8ba8bcce0247084fed79e62615466b741c8c4d02c15cbf8cc29929eeced4"
+    },
+    "directedRepoRecording": {
+      "source": "examples/save-the-cat/_src/pdd-directed-terminal.json",
+      "sourceSha256": "0df8601c7a146ab80b3a52d32579adb0a2a551e25a64f25a52bfd251f84e3b6f",
+      "asset": "examples/save-the-cat/assets/pdd-directed.webm",
+      "sha256": "a953a58b1a05b552d53702b3ce76bbd377dd9c97337993a471d0aa1e3585bbe9"
+    },
+    "codexWorkbench": {
+      "source": "examples/save-the-cat/_src/codex-workbench.json",
+      "sourceSha256": "019ffac4e54028ef801871ac8fe05d857578da89b4b552801a8e7b8aaf92f429",
+      "asset": "examples/save-the-cat/assets/codex-workbench.webm",
+      "sha256": "81c60825378bd44d64e0dcec36721bfe46d938aad5729934d1a00a9329ac81fa"
+    },
+    "releaseTerminal": {
+      "source": "examples/save-the-cat/_src/pdd-release-terminal.json",
+      "sourceSha256": "c9944f567abd13dbc3c0bfc19964ae21819d908beb82cde11352b779e1b643a6",
+      "asset": "examples/save-the-cat/assets/pdd-release.webm",
+      "sha256": "524f5e141b7a6068a559f950c998fadf1d74aafcb893b04ea070c71ad9f7f0bf"
+    }
+  },
+  "claimEvidence": {
+    "repositoryLicense": {
+      "source": "examples/save-the-cat/evidence/repository-license.json",
+      "sha256": "762e7a6dbb7db1d565a8c11de1a295b02a0e560577b9227296482ddce57e46d3"
+    },
+    "verifiedCapabilities": {
+      "source": "examples/save-the-cat/evidence/verified-capabilities.json",
+      "sha256": "776b25179219d02f147997f7d2cd7b3f55e8079680d5ee07353a9799ae4f393b"
+    }
+  },
+  "generatedAudio": {
+    "narration": {
+      "provider": "ElevenLabs",
+      "model": "eleven_v3",
+      "voice": "George",
+      "durationSec": 57.92,
+      "sha256": "a5a85c916bf04567ed9da5690d3107ca36f390d7ffe8edac5d3f15d22de03a72",
+      "timingSha256": "1b30bafef4b1e409d56a1322e91b24f56fd7df2fc4d113e395c638c8ff00d825"
+    },
+    "music": {
+      "provider": "ElevenLabs",
+      "sha256": "769ca6f916dd9ca23f17425ac2f1f984392d733c9e3d338508992da8c3bd13c9"
+    }
+  },
+  "expectedDelivery": {
+    "durationSec": 60,
+    "fps": 30,
+    "frames": 1800,
+    "videoCodec": "h264",
+    "audioCodec": "aac",
+    "color": "bt709",
+    "targetLufs": -18,
+    "strictQaIssues": 0
+  },
+  "actualDelivery": {
+    "buildId": "e1721af02278b6b8",
+    "finishId": "2c6c2f387a09f9c2",
+    "sha256": "73d28327228642ffe6f00c271ae4fe26955a6226b6ecbdf9063f3ae619637da8",
+    "durationSec": 60,
+    "fps": 30,
+    "frames": 1800,
+    "videoCodec": "h264",
+    "audioCodec": "aac",
+    "pixelFormat": "yuv420p",
+    "colorSpace": "bt709",
+    "colorRange": "tv",
+    "integratedLufs": -17.9,
+    "truePeakDbtp": -2.8,
+    "narrationThoughtCuts": 0,
+    "narrationTailSec": 2.08,
+    "blackIssues": 0,
+    "silenceIssues": 0,
+    "strictQaIssues": 0
+  },
+  "commands": [
+    ".venv/bin/python tools/term.py --project examples/save-the-cat --name pdd-raw-terminal --title 'raw recording — product-demo-director' --transcript examples/save-the-cat/_src/pdd-raw-terminal.json --out examples/save-the-cat/assets/pdd-raw.webm",
+    ".venv/bin/python tools/term.py --project examples/save-the-cat --name pdd-directed-terminal --title 'Codex — product-demo-director' --transcript examples/save-the-cat/_src/pdd-directed-terminal.json --out examples/save-the-cat/assets/pdd-directed.webm",
+    ".venv/bin/python tools/workbench.py --project examples/save-the-cat --session examples/save-the-cat/_src/codex-workbench.json --out examples/save-the-cat/assets/codex-workbench.webm",
+    ".venv/bin/python tools/term.py --project examples/save-the-cat --name pdd-release-terminal --title 'open source — product-demo-director' --transcript examples/save-the-cat/_src/pdd-release-terminal.json --out examples/save-the-cat/assets/pdd-release.webm",
+    ".venv/bin/python tools/preflight.py --project examples/save-the-cat --allow-pending-generated-narration",
+    ".venv/bin/python tools/vo.py --project examples/save-the-cat --provider elevenlabs",
+    ".venv/bin/python tools/pace.py --project examples/save-the-cat --write",
+    ".venv/bin/python tools/music.py --project examples/save-the-cat --provider elevenlabs",
+    ".venv/bin/python tools/preflight.py --project examples/save-the-cat --strict",
+    ".venv/bin/python tools/build.py --project examples/save-the-cat --contracts strict",
+    ".venv/bin/python tools/finish.py --input examples/save-the-cat/out/demo.mp4 --out examples/save-the-cat/out/demo-final.mp4 --artifact examples/save-the-cat/out/demo.artifact.json --props examples/save-the-cat/out/demo.props.json --require-artifact --target-lufs -18 --true-peak -2.0",
+    ".venv/bin/python tools/qa.py --video examples/save-the-cat/out/demo-final.mp4 --project examples/save-the-cat --props examples/save-the-cat/out/demo-final.props.json --artifact examples/save-the-cat/out/demo-final.artifact.json --out-dir examples/save-the-cat/out/qa-demo-final --strict --require-artifact --force"
+  ]
+}
