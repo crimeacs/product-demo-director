@@ -10,16 +10,17 @@ the source. Playwright drives a headless Chromium with `recordVideo`.
 
 ## Auth into a gated app
 
-- Set up your local environment by installing dependencies and running the app's dev server pointed at the real backend:
+- Set up a dedicated local or staging capture environment. Use seeded, non-production data and the
+  app's documented test-auth flow:
   ```bash
   npm install playwright dotenv && npx playwright install chromium
-  PORT=3002 EXTEND_API_KEY=test_key_abc123 npm run dev
+  PORT=3002 CAPTURE_MODE=seeded-test npm run dev
   ```
-  Pass any feature keys the captured surface needs as env or the feature 500s mid-capture.
-- Mint a magic link server-side: `POST {SUPABASE_URL}/auth/v1/admin/generate_link
-  {type:magiclink,email:<test-user>}` with the service key. The token is the **top-level**
-  `hashed_token`. Navigate to `/auth/callback?token_hash=<hash>&type=magiclink&next=<path>`;
-  the callback verifies it. One callback authes the session; later same-origin `goto`s reuse it.
+  Never put production credentials in a capture command, transcript, or committed fixture.
+- Authenticate with a dedicated test account, then save Playwright storage state outside the
+  repository. Reuse that state for same-origin navigation and invalidate it after the shoot. If the
+  app supports test-only magic links, mint one through its documented development interface rather
+  than scripting an administrator credential into the recorder.
 
 ## Source-side redaction (do it in the page, not in post)
 
