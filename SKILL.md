@@ -198,7 +198,7 @@ For an explicitly requested legacy before/after promo, the lighter timeline rema
   "fps": 30,
   "music": "calm confident minimal corporate underscore, soft pulse, no drums",
   "brand": { "name": "Product Demo ", "accent": "Director" },
-  "pronounce": { "Foresyn": "Foreseen" },
+  "pronounce": { "ACME": "Ack-me" },
   "voice_settings": { "stability": 0.32, "style": 0.75, "similarity_boost": 0.85, "use_speaker_boost": true },
   "shots": [
     { "n": 1, "kind": "title", "title": "Your demo is a flat screen recording.", "durSec": 2.6, "vo": "..." },
@@ -370,6 +370,6 @@ AI-washing to professional evaluators:
   blur-patch the render), re-render, then re-verify the excerpt's boundary seconds at ~1fps.
   A folder or file named "redacted" is not evidence of redaction.
 
-## Credit
+## License
 
-Built at [Foresyn](https://foresyn.ai). MIT licensed.
+MIT licensed. See [`LICENSE`](./LICENSE) and [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).

@@ -17,9 +17,9 @@ narration, direct a full-frame edit, render, finish, and verify the delivery.
 It's a [Claude Code](https://claude.com/claude-code) skill (see [`SKILL.md`](./SKILL.md)) and a
 standalone pipeline — drive it by hand or hand the whole loop to an agent.
 
-[▶ Watch the 60-second open-source announcement](https://github.com/crimeacs/product-demo-director/releases/latest)
+[▶ Watch the one-minute announcement with sound](https://github.com/crimeacs/product-demo-director/releases/latest)
 
-[![Codex directing the Product Demo Director workbench](docs/assets/product-demo-director-social-preview.png)](https://github.com/crimeacs/product-demo-director/releases/latest)
+[![Codex turns product evidence into a directed, source-bound demo](docs/assets/product-demo-director-demo.gif)](https://github.com/crimeacs/product-demo-director/releases/latest)
 
 ### Why it is different
 
@@ -260,9 +260,9 @@ issue forms for reproducible bug reports, feature proposals, and usage questions
 By participating, you agree to the [Code of Conduct](./CODE_OF_CONDUCT.md). Report vulnerabilities
 privately according to the [security policy](./SECURITY.md), never in a public issue.
 
-## Credit
+## Built with
 
-Built at [Foresyn](https://foresyn.ai). Motion by [Remotion](https://remotion.dev); voice and
-music by [ElevenLabs](https://elevenlabs.io); judging by Google Gemini. Repository-owned code is
-MIT licensed; Remotion and other dependencies retain their own terms—see
+Motion by [Remotion](https://remotion.dev); voice and music by
+[ElevenLabs](https://elevenlabs.io); optional judging by Google Gemini. Repository-owned code is MIT
+licensed; Remotion and other dependencies retain their own terms—see
 [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).

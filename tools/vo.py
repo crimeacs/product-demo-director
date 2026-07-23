@@ -23,7 +23,7 @@ Optional per-script knobs (in script.json):
   "narration": {"text":"[building] One continuous performance", "file":"audio/master.mp3"}
   "gemini_voice": "Charon"                  # Gemini prebuilt voice for this project
   "tts_direction": "confidently, warmly"    # spoken-style direction (Gemini only)
-  "pronounce": { "Foresyn": "Foreseen" }    # spelling->spoken, applied to the VO audio ONLY
+  "pronounce": { "ACME": "Ack-me" }         # spelling->spoken, applied to the VO audio ONLY
                                             # (on-screen captions keep the real spelling)
 """
 import argparse, base64, hashlib, json, os, re, subprocess, tempfile, time, requests

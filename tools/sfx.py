@@ -55,10 +55,6 @@ def ekey():
 def gkey():
     for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
         if os.environ.get(k): return os.environ[k]
-    p = os.path.expanduser("~/.foresyn/.secrets/google.env")
-    if os.path.exists(p):
-        for line in open(p):
-            if line.strip().startswith(("GEMINI_API_KEY=", "GOOGLE_API_KEY=")): return line.split("=",1)[1].strip().strip('"')
 
 def generate(prompt, dur, out, infl):
     import requests

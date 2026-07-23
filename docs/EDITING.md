@@ -57,8 +57,8 @@ story into a short-social pacing rubric.
    In that mode, keep clean subtitle text in `vo` and put ElevenLabs performance tags in `vo_tts`.
    For a single continuous performance, remove every per-shot `vo`/`vo_tts` and put tagged speech in
    `narration.text`; the tool writes and manifests the declared narration file. Use the per-script
-   `pronounce` map to swap brand spellings to phonetics for the TTS only (e.g. "Foresyn" ->
-   "Foreseen") while the caption keeps the real spelling. Narration-locked investor films should
+   `pronounce` map to swap brand spellings to phonetics for the TTS only (e.g. "ACME" ->
+   "Ack-me") while the caption keeps the real spelling. Narration-locked investor films should
    instead declare one hashed global supplied `narration` master and an exact `narrationMap`.
    For a generated announcement master, set `narration.fromMap=true`, put one complete thought and
    `shotN` in every map entry, and use ElevenLabs character alignment.
