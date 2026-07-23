@@ -99,6 +99,11 @@ Use `./pdd install-skill --target codex` or `--target claude` to install only on
 same command is safe; an unrelated existing file, directory, or symlink is never overwritten.
 Restart an agent app that was already open, then ask it to use Product Demo Director for your repo.
 
+When an agent works inside this checkout, Codex automatically reads
+[`AGENTS.md`](./AGENTS.md) and Claude Code reads [`CLAUDE.md`](./CLAUDE.md). Those files define the
+repository workflow, safety boundaries, exact commands, and what “done” means; `SKILL.md` remains
+the detailed production playbook.
+
 Add `--judge` to `./pdd demo` for the optional AI taste review. The deterministic preflight and QA
 gates always run; the judge never replaces them.
 
@@ -128,7 +133,8 @@ export GEMINI_API_KEY=...          # non-auto-paced Gemini TTS + Lyria music + o
 .venv/bin/python tools/pace.py  --project projects/my-demo --write # when autoPaceNarration is enabled
 .venv/bin/python tools/music.py --project projects/my-demo
 .venv/bin/python tools/sfx.py                                 # (optional) regenerate the sound palette
-.venv/bin/python tools/build.py --project projects/my-demo      # -> projects/my-demo/out/demo.mp4
+.venv/bin/python tools/preflight.py --project projects/my-demo --strict
+.venv/bin/python tools/build.py --project projects/my-demo --contracts strict
 .venv/bin/python tools/finish.py --input projects/my-demo/out/demo.mp4 \
   --out projects/my-demo/out/demo-final.mp4 --require-artifact
 .venv/bin/python tools/qa.py --video projects/my-demo/out/demo-final.mp4 --project projects/my-demo --require-artifact --strict
