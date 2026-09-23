@@ -62,6 +62,15 @@ story into a short-social pacing rubric.
    instead declare one hashed global supplied `narration` master and an exact `narrationMap`.
    For a generated announcement master, set `narration.fromMap=true`, put one complete thought and
    `shotN` in every map entry, and use ElevenLabs character alignment.
+   Eleven v3 audio tags (`[confident]`, `[thoughtful]`, `[warm, assured]`) may open a map entry's
+   `text`: the provider returns them in the character alignment, so the thought keeps its timing,
+   and they are not spoken. Use one tag per thought at most; captions should be explicit labels,
+   never the tagged text. `narration.seed`, `narration.language_code` and
+   `narration.apply_text_normalization` pass through to ElevenLabs for repeatable takes.
+4b. **Music** — `music.py` uses ElevenLabs `music_v2` (`force_instrumental`) by default. Add
+   `musicSections` (`name`, `styles`, `avoid`, `untilSec`) to compose the bed as a plan whose
+   section boundaries land on the paced cuts; `music_v2` enforces section durations exactly, so run
+   it after `pace.py --write`.
 4. **Pace narration** — run `pace.py --write` after voice and before music. It moves subject-changing
    cuts to frame-safe gaps between complete thoughts and fails when the read cannot fit with its
    protected tail. Never cut picture at arbitrary round seconds during active speech.

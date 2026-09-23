@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 from vo import (  # noqa: E402
     ALIGNMENT_PROVIDER_ERROR,
     apply_character_alignment,
+    eleven_extras,
     narration_text,
     needs_character_alignment,
     select_provider,
@@ -142,6 +143,29 @@ class VoiceAlignmentTests(unittest.TestCase):
             select_provider("gemini", legacy_per_shot, environment),
             "gemini",
         )
+
+
+class ElevenExtrasTests(unittest.TestCase):
+    def test_empty_by_default(self):
+        self.assertEqual({}, eleven_extras({"narration": {"fromMap": True}}))
+
+    def test_passes_only_valid_fields(self):
+        script = {"narration": {"seed": 7, "language_code": "en", "apply_text_normalization": "on"}}
+        self.assertEqual({"seed": 7, "language_code": "en", "apply_text_normalization": "on"},
+                         eleven_extras(script))
+        self.assertEqual({}, eleven_extras({"narration": {"seed": "7", "apply_text_normalization": "yes"}}))
+
+    def test_v3_audio_tags_align_inside_their_thought(self):
+        script = {"narration": {"fromMap": True},
+                  "narrationMap": [{"text": "[wry] Friday night."}, {"text": "[confident] Send the queue."}]}
+        spoken = narration_text(script)
+        chars = list(spoken)
+        alignment = {"characters": chars,
+                     "character_start_times_seconds": [i * 0.05 for i in range(len(chars))],
+                     "character_end_times_seconds": [i * 0.05 + 0.05 for i in range(len(chars))]}
+        self.assertEqual(2, apply_character_alignment(script, spoken, alignment))
+        self.assertEqual(0.0, script["narrationMap"][0]["startSec"])
+        self.assertLess(script["narrationMap"][0]["endSec"], script["narrationMap"][1]["startSec"])
 
 
 if __name__ == "__main__":

@@ -6,7 +6,20 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
-from judge import LIVE_RUBRIC, RUBRIC, _structural, calibrate, probe_paths  # noqa: E402
+from judge import DEFAULT_MODEL, LIVE_RUBRIC, RUBRIC, _judge_config, _structural, calibrate, probe_paths  # noqa: E402
+
+
+class JudgeModelTests(unittest.TestCase):
+    def test_default_is_a_pinned_gemini_3_model(self):
+        self.assertTrue(DEFAULT_MODEL.startswith("gemini-3"))
+        self.assertNotIn("latest", DEFAULT_MODEL)
+
+    def test_gemini_3_thinks_instead_of_forcing_temperature(self):
+        from google.genai import types
+        cfg = _judge_config(types, "gemini-3.1-pro-preview")
+        self.assertIsNone(cfg.temperature)
+        self.assertEqual("HIGH", cfg.thinking_config.thinking_level.name)
+        self.assertEqual(0.0, _judge_config(types, "gemini-2.5-flash").temperature)
 
 
 class JudgeProfileTests(unittest.TestCase):

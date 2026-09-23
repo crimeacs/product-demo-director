@@ -11,7 +11,12 @@ shot durations. ElevenLabs renders the exact length (cap 300s); Lyria renders a
 ~30s clip which is crossfade-looped up to the needed length.
 
 Env: ELEVENLABS_API_KEY and/or GEMINI_API_KEY (or GOOGLE_API_KEY).
-     LYRIA_MODEL overrides the Lyria model (default lyria-3-clip-preview).
+     MUSIC_MODEL overrides the ElevenLabs music model (default music_v2).
+     LYRIA_MODEL overrides the Lyria model (default lyria-3.5).
+
+Optional script.json "musicSections": [{"name", "styles": [...], "avoid": [...], "untilSec"}]
+turns the bed into an ElevenLabs composition plan whose section boundaries land on the edit
+(music_v2 enforces section durations exactly). Without it, a single instrumental prompt is used.
 """
 import argparse, base64, json, os, re, subprocess, tempfile, requests
 
@@ -108,13 +113,50 @@ def target_seconds(args, script):
     return total + 2.5
 
 
-def gen_elevenlabs(prompt, seconds, out):
+MUSIC_MODEL = os.environ.get("MUSIC_MODEL", "music_v2")
+NO_VOCALS = ["vocals", "singing", "lyrics", "spoken word"]
+
+
+def composition_plan(script, seconds, model=None):
+    """Build an instrumental plan whose section boundaries land on authored cut times.
+
+    music_v2 takes the chunk form (per-chunk styles, durations always enforced);
+    music_v1 takes the section form (MusicPrompt with global + local styles)."""
+    sections = script.get("musicSections") or []
+    if not sections:
+        return None
+    model = model or MUSIC_MODEL
+    total_ms = int(round(seconds * 1000))
+    mood = [p.strip() for p in (script.get("music") or DEFAULT_MOOD).split(",") if p.strip()]
+    spans, start = [], 0
+    for index, sec in enumerate(sections):
+        last = index == len(sections) - 1
+        end = total_ms if last else int(round(float(sec["untilSec"]) * 1000))
+        duration = max(3000, min(120000, end - start))
+        spans.append((str(sec.get("name") or f"section {index + 1}")[:100], sec, duration))
+        start += duration
+    if model == "music_v1":
+        return {"positive_global_styles": mood + ["instrumental", "background bed under a voiceover"],
+                "negative_global_styles": NO_VOCALS,
+                "sections": [{"section_name": name, "positive_local_styles": list(sec.get("styles") or []),
+                              "negative_local_styles": list(sec.get("avoid") or []) + NO_VOCALS,
+                              "duration_ms": duration, "lines": []} for name, sec, duration in spans]}
+    return {"chunks": [{"text": f"[{name}]\n{{instrumental}}", "duration_ms": duration,
+                        "positive_styles": mood + list(sec.get("styles") or []) + ["instrumental"],
+                        "negative_styles": list(sec.get("avoid") or []) + NO_VOCALS,
+                        "context_adherence": "high"} for name, sec, duration in spans]}
+
+
+def gen_elevenlabs(prompt, seconds, out, plan=None):
     key = os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("ELEVEN_API_KEY")
     length_ms = min(300000, int(round(seconds * 1000)) or 30000)
+    body = ({"composition_plan": plan, "model_id": MUSIC_MODEL} if plan else
+            {"prompt": prompt, "music_length_ms": length_ms, "model_id": MUSIC_MODEL,
+             "force_instrumental": True})
     r = requests.post(
         "https://api.elevenlabs.io/v1/music",
         headers={"xi-api-key": key, "Content-Type": "application/json"},
-        json={"prompt": prompt, "music_length_ms": length_ms},
+        json=body,
         timeout=300,
     )
     if r.status_code >= 300:
@@ -124,7 +166,7 @@ def gen_elevenlabs(prompt, seconds, out):
 
 def gen_lyria(prompt, seconds, out):
     key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    model = os.environ.get("LYRIA_MODEL", "lyria-3-clip-preview")
+    model = os.environ.get("LYRIA_MODEL", "lyria-3.5")
     r = requests.post(
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}",
         json={"contents": [{"parts": [{"text": prompt}]}],
@@ -191,7 +233,10 @@ def main():
     prompt = (script.get("music") or DEFAULT_MOOD)[:480] + BED_SUFFIX
     seconds = target_seconds(args, script)
     out = os.path.join(args.project, "music.mp3")
-    (gen_elevenlabs if provider == "elevenlabs" else gen_lyria)(prompt, seconds, out)
+    if provider == "elevenlabs":
+        gen_elevenlabs(prompt, seconds, out, composition_plan(script, seconds))
+    else:
+        gen_lyria(prompt, seconds, out)
     repaired = ensure_audible_timeline_tail(out, seconds)
     dur = f"{_duration(out):.6f}"
     if repaired:

@@ -36,8 +36,9 @@ sys.path.insert(0, HERE)  # import sibling tools when run as a script
 import capture  # noqa: E402
 from events import normalize_events_file, transform_events  # noqa: E402,F401
 
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_PLANNER_MODEL", "claude-sonnet-4-5")
-GEMINI_MODEL = os.environ.get("PDD_PLANNER_GEMINI_MODEL", "gemini-flash-latest")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_PLANNER_MODEL", "claude-fable-5-1")
+ANTHROPIC_EFFORT = os.environ.get("ANTHROPIC_PLANNER_EFFORT", "high")
+GEMINI_MODEL = os.environ.get("PDD_PLANNER_GEMINI_MODEL", "gemini-3.1-pro-preview")
 
 STEPS_SCHEMA = (
     'A JSON array of steps run in order. Allowed step objects:\n'
@@ -64,9 +65,19 @@ def llm_json(system, user):
         try:
             import anthropic
             c = anthropic.Anthropic()
-            r = c.messages.create(model=ANTHROPIC_MODEL, max_tokens=1500, temperature=0,
-                                  system=system, messages=[{"role": "user", "content": user}])
-            return _extract_json(r.content[0].text)
+            # Claude Fable 5.1: thinking is always on (adaptive), sampling params are rejected,
+            # depth is set with effort; server-side fallbacks rescue a policy decline in-call.
+            with c.beta.messages.stream(
+                model=ANTHROPIC_MODEL, max_tokens=32000, system=system,
+                messages=[{"role": "user", "content": user}],
+                output_config={"effort": ANTHROPIC_EFFORT},
+                betas=["server-side-fallback-2026-07-01"], fallbacks="default",
+            ) as stream:
+                r = stream.get_final_message()
+            if r.stop_reason == "refusal":
+                raise RuntimeError(f"refused ({getattr(r.stop_details, 'category', None)})")
+            text = "".join(b.text for b in r.content if b.type == "text")
+            return _extract_json(text)
         except Exception as e:
             print("  (anthropic SDK planner failed:", e, "- falling through)")
     # 2) the claude CLI (present in Claude Code; uses the configured model, no id needed)
@@ -87,7 +98,8 @@ def llm_json(system, user):
             cl = genai.Client(api_key=key)
             resp = cl.models.generate_content(
                 model=GEMINI_MODEL, contents=f"{system}\n\n{user}",
-                config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0))
+                config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                   thinking_config=types.ThinkingConfig(thinking_level="high")))
             return _extract_json(resp.text)
         except Exception as e:
             print("  (gemini planner failed:", e, "- falling through)")

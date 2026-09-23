@@ -60,7 +60,8 @@ def generate(prompt, dur, out, infl):
     import requests
     r = requests.post("https://api.elevenlabs.io/v1/sound-generation",
         headers={"xi-api-key": ekey(), "Content-Type": "application/json", "Accept": "audio/mpeg"},
-        json={"text": prompt, "duration_seconds": dur, "prompt_influence": infl}, timeout=180)
+        json={"text": prompt, "duration_seconds": dur, "prompt_influence": infl,
+              "model_id": os.environ.get("SFX_MODEL", "eleven_text_to_sound_v2")}, timeout=180)
     if r.status_code >= 300: return False
     raw = out.replace(".mp3", "_raw.mp3"); open(raw, "wb").write(r.content)
     subprocess.run(["ffmpeg","-y","-i",raw,"-af",f"loudnorm=I=-19:TP=-1.5,afade=t=out:st={max(0.1,dur-0.18):.2f}:d=0.18",out], capture_output=True)
@@ -78,11 +79,12 @@ def listen_score(path, role):
         f"Intended role: {role}. Rate 0-100 how well it works for that role in a polished, premium, NON-cheesy demo. "
         f"Penalize harsh, cheap/8-bit, cartoonish, distorted, generic-stock, annoying. Reward clean, modern, tasteful, "
         f"satisfying, well-shaped. Return STRICT JSON only: {{\"score\":<int>,\"note\":\"<10 words>\"}}")
-    for model in ("gemini-flash-latest", "gemini-2.5-flash"):
+    for model in (os.environ.get("SFX_LISTEN_MODEL", "gemini-3.1-pro-preview"), "gemini-3.8-flash"):
         try:
             resp = c.models.generate_content(model=model,
                 contents=types.Content(parts=[types.Part(file_data=types.FileData(file_uri=f.uri, mime_type=f.mime_type)), types.Part(text=prompt)]),
-                config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.2))
+                config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                   thinking_config=types.ThinkingConfig(thinking_level="high")))
             return json.loads(re.search(r"\{.*\}", resp.text, re.S).group(0))
         except Exception: continue
     return {"score": 0, "note": "judge error"}
