@@ -1,0 +1,8 @@
+[{"t":0.05,"cue":"whoosh"},{"t":0.84,"cue":"clap"},{"t":1.0,"cue":"thud"},{"t":1.3,"cue":"thud"},
+ {"t":3.95,"cue":"whoosh"},{"t":4.3,"cue":"thud"},{"t":4.8,"cue":"pop"},{"t":5.05,"cue":"pop"},{"t":5.3,"cue":"pop"},{"t":5.55,"cue":"pop"},
+ {"t":6.8,"cue":"whoosh"},{"t":7.5,"cue":"tick"},{"t":7.74,"cue":"tick"},{"t":7.98,"cue":"tick"},{"t":8.22,"cue":"tick"},{"t":8.46,"cue":"tick"},{"t":8.7,"cue":"tick"},{"t":8.94,"cue":"tick"},
+ {"t":9.15,"cue":"whoosh"},{"t":9.5,"cue":"thud"},{"t":11.7,"cue":"snap"},{"t":12.2,"cue":"snap"},
+ {"t":15.15,"cue":"whoosh"},{"t":15.5,"cue":"thud"},{"t":15.95,"cue":"thud"},{"t":16.2,"cue":"projector"},
+ {"t":20.35,"cue":"whoosh"},{"t":20.95,"cue":"thud"},{"t":21.3,"cue":"thud"},{"t":22.3,"cue":"print"},
+ {"t":22.33,"cue":"tick"},{"t":22.63,"cue":"tick"},{"t":22.93,"cue":"tick"},{"t":23.23,"cue":"tick"},{"t":23.53,"cue":"tick"},{"t":23.83,"cue":"tick"},{"t":24.13,"cue":"tick"},{"t":24.43,"cue":"tick"},
+ {"t":25.55,"cue":"whoosh"},{"t":25.95,"cue":"thud"},{"t":26.4,"cue":"clap"}]

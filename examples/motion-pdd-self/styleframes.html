@@ -1,0 +1,57 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Style frames · Product Demo Director</title>
+<link rel="stylesheet" href="../../motion/fonts/fonts.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden}
+.f{position:absolute;inset:0;display:none;overflow:hidden;-webkit-font-smoothing:antialiased}
+.abs{position:absolute}
+/* D1 Cutting room: paper stock, ink, violet, tape yellow */
+.D1{background:#efeae0;color:#111;font-family:'Inter Tight',sans-serif}
+.D1 .n{font-weight:900;letter-spacing:-.06em;line-height:.82}
+.D1 .m{font-family:'Plex';font-size:22px;letter-spacing:.06em;text-transform:uppercase}
+.D1 .trk{position:absolute;height:64px;border-radius:10px}
+.D1 .spr{position:absolute;left:0;right:0;height:44px;background:#111;
+  background-image:radial-gradient(circle at 20px 22px,#efeae0 0 9px,transparent 10px);background-size:52px 44px}
+/* D2 Projector: black, cream serif, light */
+.D2{background:#050505;color:#f4ecdc;font-family:'Instrument Serif',serif}
+.D2 .h{font-size:170px;line-height:.9;letter-spacing:-.02em}
+.D2 .h i{color:#ffcf5a}
+.D2 .m{font-family:'Plex';font-size:20px;letter-spacing:.1em;color:#8d8575;text-transform:uppercase}
+.D2 .gate{position:absolute;border-radius:28px;background:#0f0f0f;box-shadow:0 0 0 2px #1d1d1d,0 0 180px rgba(255,207,90,.18)}
+</style></head><body>
+
+<section class="f D1" id="D1a">
+  <div class="spr" style="top:0"></div><div class="spr" style="bottom:0"></div>
+  <div class="abs m" style="left:90px;top:84px">Product Demo Director</div>
+  <div class="abs m" style="right:90px;top:84px">Scene 01 · Take 01</div>
+  <div class="abs n" style="left:80px;top:170px;font-size:230px">Your product<br>has a story.</div>
+  <div class="abs" style="left:90px;top:680px;width:1740px">
+    <div class="trk" style="left:0;top:0;width:420px;background:#111"></div>
+    <div class="trk" style="left:430px;top:0;width:260px;background:#6d5dfc"></div>
+    <div class="trk" style="left:700px;top:0;width:520px;background:#111"></div>
+    <div class="trk" style="left:1230px;top:0;width:510px;background:#ffd23f"></div>
+    <div class="trk" style="left:0;top:80px;width:1740px;height:64px;background:#dcd5c7"></div>
+    <div class="abs" style="left:690px;top:-30px;width:4px;height:200px;background:#ff3b30"></div>
+  </div>
+  <div class="abs m" style="left:90px;top:880px">Evidence in. A directed film out.</div>
+</section>
+<section class="f D1" id="D1b">
+  <div class="spr" style="top:0"></div><div class="spr" style="bottom:0"></div>
+  <div class="abs" style="left:0;top:44px;width:960px;bottom:44px;background:#6d5dfc"></div>
+  <div class="abs n" style="left:80px;top:250px;font-size:210px;color:#efeae0">Cut.<br>Print.</div>
+  <div class="abs n" style="left:1040px;top:250px;font-size:120px">Ship the<br>exact file.</div>
+  <div class="abs m" style="left:1040px;top:600px;line-height:1.8">sha256 ✓ · -14 LUFS ✓<br>0 black frames ✓ · 0 silences ✓</div>
+</section>
+
+<section class="f D2" id="D2a">
+  <div class="gate" style="left:760px;top:180px;width:1040px;height:585px"></div>
+  <div class="abs m" style="left:120px;top:120px">A film about the film-maker</div>
+  <div class="abs h" style="left:110px;top:300px">Your product<br>has a <i>story</i>.</div>
+  <div class="abs m" style="left:120px;top:880px">Product Demo Director · for Claude Code and Codex</div>
+</section>
+<section class="f D2" id="D2b">
+  <div class="abs h" style="left:0;right:0;top:360px;text-align:center">Evidence in.<br><i>A directed film out.</i></div>
+</section>
+<script>document.getElementById(new URLSearchParams(location.search).get('f')||'D1a').style.display='block'</script>
+</body></html>
