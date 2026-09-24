@@ -55,7 +55,7 @@ script.json + footage
         ▼
    vo.py     aligned announcement narration — ElevenLabs; non-auto-paced VO may use Gemini TTS
    pace.py   uses ElevenLabs character timing to move picture cuts between complete spoken thoughts
-   music.py  an instrumental bed sized to the runtime — ElevenLabs Music or Lyria 3 (auto by key)
+   music.py  an instrumental bed sized to the runtime — ElevenLabs `music_v2` (optionally a composition plan timed to the cuts) or Lyria 3.5
    sfx.py    bespoke SFX palette — 3 variants/cue, a model listens and keeps the best
         │
         ▼
@@ -213,7 +213,7 @@ single-focus announcement profile. Full schema + knobs (`production`, `narration
 | `tools/workbench.py` | Render a JSON-driven Claude/Codex production workbench with prompt, tools, previews, timeline, render, and QA states. |
 | `tools/script.py` | Draft a Save-the-Cat, causal-workflow, before-after, or walkthrough `script.json` from the product, brand, and footage manifest. |
 | `tools/preflight.py` | Deterministic source/story/claim/audio/camera checks before render. |
-| `tools/vo.py` | ElevenLabs `eleven_v3` or Gemini TTS, as per-shot lines or one continuous generated narration master; supplied human masters are staged by `build.py`. |
+| `tools/vo.py` | ElevenLabs `eleven_v3` (inline audio tags, optional `seed` / `language_code`) or Gemini `gemini-3.8-flash-tts`, as per-shot lines or one continuous generated narration master; supplied human masters are staged by `build.py`. |
 | `tools/pace.py` | Retimes picture boundaries to timestamp-aligned narration gaps without accelerating or truncating speech. |
 | `tools/music.py` | ElevenLabs Music or Lyria bed, sized to the narrated runtime. |
 | `tools/sfx.py` | Forge a bespoke SFX palette; a model listens and keeps the best of each. |

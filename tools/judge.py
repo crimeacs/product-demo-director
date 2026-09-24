@@ -283,7 +283,7 @@ def judge_video(client, video, context, props, fps, model, runs, lenses=None):
                 resp = client.models.generate_content(
                     model=model,
                     contents=types.Content(parts=[part_video, types.Part(text=prompt)]),
-                    config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.0),
+                    config=_judge_config(types, model),
                 )
                 m = re.search(r"\{.*\}", resp.text, re.S)
                 result = json.loads(m.group(0) if m else resp.text)
@@ -380,9 +380,18 @@ def probe(client, fps, model, *, good_path="", bad_path=""):
     sys.exit(0 if ok else 1)
 
 
+def _judge_config(types, model):
+    """Gemini 3.x: high thinking level at default temperature; older models: temperature 0."""
+    if model.startswith("gemini-3"):
+        return types.GenerateContentConfig(response_mime_type="application/json",
+                                           thinking_config=types.ThinkingConfig(thinking_level="high"))
+    return types.GenerateContentConfig(response_mime_type="application/json", temperature=0.0)
+
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-# pinned: a floating alias ("gemini-flash-latest") makes scores drift across sessions
-DEFAULT_MODEL = "gemini-2.5-flash"
+# pinned: a floating alias ("gemini-pro-latest") makes scores drift across sessions.
+# Gemini 3.x reasons with thinking_level; Google advises leaving temperature at its default.
+DEFAULT_MODEL = "gemini-3.1-pro-preview"
 
 
 def main():

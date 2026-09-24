@@ -21,8 +21,9 @@ import argparse, json, os, re, shutil, subprocess, sys
 from contracts import SAVE_THE_CAT_BEATS, validate_script as validate_contract
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ANTHROPIC_MODEL = os.environ.get("PDD_DRAFT_MODEL", "claude-sonnet-4-5")
-GEMINI_MODEL = os.environ.get("PDD_DRAFT_GEMINI_MODEL", "gemini-flash-latest")
+ANTHROPIC_MODEL = os.environ.get("PDD_DRAFT_MODEL", "claude-fable-5-1")
+ANTHROPIC_EFFORT = os.environ.get("PDD_DRAFT_EFFORT", "high")
+GEMINI_MODEL = os.environ.get("PDD_DRAFT_GEMINI_MODEL", "gemini-3.1-pro-preview")
 ALLOWED_KINDS = ("title", "clip", "split", "stat", "cta", "score", "bars", "strip")
 
 RULES = """CRAFT RULES (from docs/EDITING.md — follow them):
@@ -118,9 +119,19 @@ def llm_json(system, user):
         try:
             import anthropic
             c = anthropic.Anthropic()
-            r = c.messages.create(model=ANTHROPIC_MODEL, max_tokens=2000, temperature=0.3,
-                                  system=system, messages=[{"role": "user", "content": user}])
-            return _extract_json(r.content[0].text)
+            # Claude Fable 5.1: thinking is always on (adaptive), sampling params are rejected,
+            # depth is set with effort; server-side fallbacks rescue a policy decline in-call.
+            with c.beta.messages.stream(
+                model=ANTHROPIC_MODEL, max_tokens=32000, system=system,
+                messages=[{"role": "user", "content": user}],
+                output_config={"effort": ANTHROPIC_EFFORT},
+                betas=["server-side-fallback-2026-07-01"], fallbacks="default",
+            ) as stream:
+                r = stream.get_final_message()
+            if r.stop_reason == "refusal":
+                raise RuntimeError(f"refused ({getattr(r.stop_details, 'category', None)})")
+            text = "".join(b.text for b in r.content if b.type == "text")
+            return _extract_json(text)
         except Exception as e:
             print("  (anthropic SDK draft failed:", e, "- falling through)")
     if shutil.which("claude"):
@@ -139,7 +150,8 @@ def llm_json(system, user):
             cl = genai.Client(api_key=key)
             resp = cl.models.generate_content(
                 model=GEMINI_MODEL, contents=f"{system}\n\n{user}",
-                config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.3))
+                config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                   thinking_config=types.ThinkingConfig(thinking_level="high")))
             return _extract_json(resp.text)
         except Exception as e:
             print("  (gemini draft failed:", e, "- falling through)")

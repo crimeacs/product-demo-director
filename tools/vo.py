@@ -13,7 +13,7 @@ Env:
   GEMINI_API_KEY       enables the Gemini TTS provider (or GOOGLE_API_KEY)
   VO_VOICE_ID          ElevenLabs voice id (default: George, a grounded narrative read)
   VO_MODEL             default eleven_v3
-  GEMINI_TTS_MODEL     default gemini-2.5-flash-preview-tts
+  GEMINI_TTS_MODEL     default gemini-3.8-flash-tts
   GEMINI_TTS_VOICE     default Charon (a warm, confident narrator)
 
 Optional per-script knobs (in script.json):
@@ -65,6 +65,20 @@ def select_provider(requested, script, environ=None):
     return provider
 
 
+def eleven_extras(script):
+    """Optional ElevenLabs request fields from script.narration: a sampling seed for repeatable
+    takes, an ISO 639-1 language_code, and apply_text_normalization ("auto" | "on" | "off")."""
+    narration = script.get("narration") if isinstance(script.get("narration"), dict) else {}
+    extras = {}
+    if isinstance(narration.get("seed"), int):
+        extras["seed"] = narration["seed"]
+    if narration.get("language_code"):
+        extras["language_code"] = str(narration["language_code"])
+    if narration.get("apply_text_normalization") in ("auto", "on", "off"):
+        extras["apply_text_normalization"] = narration["apply_text_normalization"]
+    return extras
+
+
 def synth_elevenlabs(spoken, out, script, override=None):
     override = override if isinstance(override, dict) else {}
     key = os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("ELEVEN_API_KEY")
@@ -76,7 +90,7 @@ def synth_elevenlabs(spoken, out, script, override=None):
         f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128",
         headers={"xi-api-key": key, "Content-Type": "application/json", "Accept": "audio/mpeg"},
         json={"text": spoken, "model_id": model,
-              "voice_settings": settings},
+              "voice_settings": settings, **eleven_extras(script)},
         timeout=120,
     )
     if r.status_code >= 300:
@@ -97,7 +111,8 @@ def synth_elevenlabs_aligned(spoken, out, script, override=None):
     response = requests.post(
         f"https://api.elevenlabs.io/v1/text-to-speech/{voice}/with-timestamps?output_format=mp3_44100_128",
         headers={"xi-api-key": key, "Content-Type": "application/json", "Accept": "application/json"},
-        json={"text": spoken, "model_id": model, "voice_settings": settings},
+        json={"text": spoken, "model_id": model, "voice_settings": settings,
+              **eleven_extras(script)},
         timeout=120,
     )
     if response.status_code >= 300:
@@ -164,7 +179,7 @@ def apply_character_alignment(script, spoken, alignment):
 
 def synth_gemini(spoken, out, script):
     key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    model = os.environ.get("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts")
+    model = os.environ.get("GEMINI_TTS_MODEL", "gemini-3.8-flash-tts")
     voice = os.environ.get("GEMINI_TTS_VOICE") or script.get("gemini_voice") or "Charon"
     direction = script.get("tts_direction", DEFAULT_DIRECTION)
     body = {
@@ -237,7 +252,7 @@ def main():
         eleven_model = narration.get("model") or os.environ.get("VO_MODEL", "eleven_v3")
         eleven_voice = (os.environ.get("VO_VOICE_ID") or narration.get("voiceId")
                          or script.get("voiceId") or DEFAULT_ELEVEN_VOICE_ID)
-        gemini_model = os.environ.get("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts")
+        gemini_model = os.environ.get("GEMINI_TTS_MODEL", "gemini-3.8-flash-tts")
         gemini_voice = (os.environ.get("GEMINI_TTS_VOICE") or narration.get("voice")
                         or script.get("gemini_voice") or "Charon")
         direction = narration.get("direction") or script.get("tts_direction") or DEFAULT_DIRECTION
@@ -254,6 +269,9 @@ def main():
                 if isinstance(entry, dict) and str(entry.get("text", "") or "").strip()
             ],
         }
+        extras = eleven_extras(script) if provider == "elevenlabs" else {}
+        if extras:  # only new knobs change the cache key; existing masters stay valid
+            signature_payload["extras"] = extras
         signature = hashlib.sha256(json.dumps(signature_payload, sort_keys=True).encode()).hexdigest()[:20]
         master_manifest_path = os.path.join(outdir, "master-manifest.json")
         timing_relative = str(narration.get("timingFile") or "audio/master-timing.json")
@@ -369,7 +387,7 @@ def main():
         except Exception:
             old = {}
     voice_sig = json.dumps([provider, os.environ.get("VO_MODEL", "eleven_v3"),
-                            os.environ.get("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts"),
+                            os.environ.get("GEMINI_TTS_MODEL", "gemini-3.8-flash-tts"),
                             os.environ.get("VO_VOICE_ID", ""), os.environ.get("GEMINI_TTS_VOICE", ""),
                             script.get("voiceId", ""), script.get("gemini_voice", ""),
                             script.get("voice_settings", {}), script.get("tts_direction", "")], sort_keys=True)

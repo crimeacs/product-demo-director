@@ -40,7 +40,7 @@ Not for: editing arbitrary cinematic footage, or anything where you don't contro
 cd engine && npm install && cd ..
 python -m venv .venv && . .venv/bin/activate && pip install -r tools/requirements.txt
 playwright install chromium          # only if you use tools/capture.py
-export GEMINI_API_KEY=...             # judge + non-auto-paced Gemini TTS + Lyria 3
+export GEMINI_API_KEY=...             # judge (gemini-3.1-pro-preview) + non-auto-paced Gemini TTS + Lyria 3.5
 export ELEVENLABS_API_KEY=...         # required for auto-paced narration maps; also VO + music
 ```
 
@@ -48,7 +48,7 @@ New announcement scaffolds use `narration.fromMap=true` and `production.autoPace
 they require `ELEVENLABS_API_KEY` because `pace.py` consumes ElevenLabs character timestamps.
 With only `GEMINI_API_KEY`, `vo.py` still speaks non-auto-paced and legacy scripts through Gemini
 TTS (`--provider gemini`, voice via `gemini_voice`/`tts_direction`), while `music.py` composes
-through Lyria 3 and `judge.py` can review the final cut. ElevenLabs is selected automatically when
+through Lyria 3.5 and `judge.py` can review the final cut. ElevenLabs is selected automatically when
 its key is present.
 
 ## Run the pipeline
