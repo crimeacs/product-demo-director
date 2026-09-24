@@ -4,16 +4,14 @@ Some films are best made without footage: a brand/launch spot where the product'
 designed moments. This track produces those films as code (HTML/CSS + `motion/kit.js`), renders them
 frame-exact with real motion blur, mixes music and sound design, and gates delivery on deterministic QA.
 
-Worked examples: `examples/motion-sweat-ident/` (Sweat, "Let us sweat for you", 16:9, 33 s, the approved
-benchmark) , `examples/motion-sweat-nightshift/` (a boundary test: vertical 9:16, 21 s, a different concept,
-look, motion language, score and per-film sound palette) and `examples/motion-pdd-self/` (this repository's
-own 30 s film, in the Cutting room direction, using frames from example 1 as proof). The founder's
-verdict after 13 iterations was "this is sooo good". Everything below is what it took to get there.
+Worked example: `examples/motion-pdd-self/` (this repository's own 30 s film, 16:9, in the Cutting room
+direction). The method below was distilled from a 13-iteration client launch spot the founder called
+"so good", and tested on a vertical 9:16 ad with a different concept, look, score and sound palette.
 
 ## The method (do not skip steps)
 
 1. **Brief in one breath.** Who buys, the two or three things they must remember, and the one feeling.
-   Write the value-led close line first (e.g. "Let us sweat for you."), not a clever negative
+   Write the value-led close line first (e.g. "Evidence in. A directed film out."), not a clever negative
    ("Don't post the job" was rejected as not value-led).
 2. **Style frames before animation.** Design 2 to 3 genuinely different directions as stills in
    `styleframes.html` (one section per frame, selected by `?f=`), 2 to 3 frames each: hook, proof, close.
@@ -33,11 +31,11 @@ Pick contrasting ones for the style frames; invent new ones when the brand calls
 
 | Direction | Language | When |
 |---|---|---|
-| **Ident** (chosen for Sweat) | Solid colour blocks (hot accent / ink / cream), huge grotesque cropped off-frame (Bricolage 800, tight tracking), pills with flat offset shadows, roundels, ✕ / ✓ verdict discs, hard colour-block wipes | Confident startup launch, punchy social cut |
-| Editorial | Paper stock + grain, large serif with italics (Instrument Serif), hairline rules, ledgers, ink stamps | Premium, calm, trust-heavy brands (founder of Sweat disliked it for Sweat) |
+| **Ident** (chosen for the benchmark spot) | Solid colour blocks (hot accent / ink / cream), huge grotesque cropped off-frame (Bricolage 800, tight tracking), pills with flat offset shadows, roundels, ✕ / ✓ verdict discs, hard colour-block wipes | Confident startup launch, punchy social cut |
+| Editorial | Paper stock + grain, large serif with italics (Instrument Serif), hairline rules, ledgers, ink stamps | Premium, calm, trust-heavy brands (the benchmark's founder rejected it for a punchy startup) |
 | Kinetic UI | Dark charcoal, one accent, redrawn product objects (specimen docs, check lists, analyst card), measured AI callouts | Product-proof heavy films |
-| Blueprint set (example 2) | A drawing sheet that persists across scenes: registration marks, a title block with live fields (drawing no., time, scale, status), line art drawn on by stroke reveals, detail bubbles (DETAIL A/B) that enlarge the decisive part, a parts-list table with the right row ringed, one warm signal colour | Stories about time, process, precision, reliability |
-| Cutting room (example 3) | Warm film stock, running sprocket bands top and bottom, a live timecode, a clapperboard slate, edit-timeline tracks in ink / violet / tape yellow, a red playhead and cut markers that snap into place, a film strip of real output frames | Tools for makers, anything about editing, production or shipping |
+| Blueprint set | A drawing sheet that persists across scenes: registration marks, a title block with live fields (drawing no., time, scale, status), line art drawn on by stroke reveals, detail bubbles (DETAIL A/B) that enlarge the decisive part, a parts-list table with the right row ringed, one warm signal colour | Stories about time, process, precision, reliability |
+| Cutting room (the worked example) | Warm film stock, running sprocket bands top and bottom, a live timecode, a clapperboard slate, edit-timeline tracks in ink / violet / tape yellow, a red playhead and cut markers that snap into place, a film strip of real output frames | Tools for makers, anything about editing, production or shipping |
 | Swiss poster | Off-white, signal red block, strict grid, huge numerals | Bold data-led statements |
 | Paper cut | Pastel paper layers with soft shadows, friendly rounded type | Warm, human, consumer-facing brands |
 | Soft 3D | Real 3D plates (Blender scripts) composited under 2D type | Only when the brand is tactile; costs time |
@@ -45,7 +43,7 @@ Pick contrasting ones for the style frames; invent new ones when the brand calls
 ## Make it look designed, not animated slides
 
 The first cut of the boundary test was rejected as not "designed": each scene was a good slide, but the
-film had no system. What fixed it (example 2, v1 -> v2):
+film had no system. What fixed it (v1 -> v2 of the vertical test ad):
 
 - **A persistent frame that belongs to the metaphor.** One set of chrome lives above every scene and never
   wipes away: the drawing sheet's border and title block, the film's sprockets and timecode. Scenes change

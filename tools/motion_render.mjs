@@ -1,6 +1,6 @@
 // Render a code-built motion film (motion/kit.js contract) to MP4 with real motion blur.
 //
-//   node tools/motion_render.mjs --film examples/motion-sweat-ident/film.html --out out/film.mp4
+//   node tools/motion_render.mjs --film examples/motion-pdd-self/film.html --out out/film.mp4
 //        [--fps 60] [--sub 4] [--shutter 0.5] [--dpr 1] [--workers 8] [--from 0] [--to DUR] [--stills 1.2,5.5]
 //
 // Serves the repository root over a private local HTTP server (module scripts and fonts do not load
