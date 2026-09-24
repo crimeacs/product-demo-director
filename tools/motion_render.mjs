@@ -29,15 +29,23 @@ const server = http.createServer((req, res) => {
 });
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const url = `http://127.0.0.1:${server.address().port}${path.resolve(film).split(path.sep).join('/')}${args.query ? '?' + args.query : ''}`;
+let W = 1920, H = 1080;   // replaced by window.SIZE = [w, h] when the film declares it (e.g. 1080x1920 vertical)
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-async function page() {
-  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: DPR });
+async function page(q = '') {
+  const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: DPR });
   const p = await ctx.newPage(); p.on('pageerror', e => console.error('PAGE ERROR:', e.message));
-  await p.goto(url); await p.waitForFunction(() => window.ready === true || (typeof window.ready !== 'object' && window.ready !== false && typeof window.seek === 'function'), null, { timeout: 120000 });
+  await p.goto(url + (q ? (url.includes('?') ? '&' : '?') + q : '')); if (!args.shots) await p.waitForFunction(() => window.ready === true || (typeof window.ready !== 'object' && window.ready !== false && typeof window.seek === 'function'), null, { timeout: 120000 });
   await p.evaluate(() => document.fonts.ready); await p.waitForTimeout(200); return { ctx, p };
 }
 fs.mkdirSync(path.dirname(out), { recursive: true });
 const t0 = Date.now();
+{ const { ctx, p } = await page(args.shots ? args.shots.split(',')[0] : ''); const size = await p.evaluate(() => window.SIZE || null); await ctx.close();
+  if (size) { [W, H] = size; if (W % 2 || H % 2) { console.error('window.SIZE must be even'); process.exit(2); } } }
+if (args.shots) {   // style frames: one screenshot per query string, e.g. --shots f=C1a,f=C1b
+  for (const q of args.shots.split(',')) { const { ctx, p } = await page(q); await p.evaluate(() => document.fonts.ready); await p.waitForTimeout(250);
+    const f = out.replace(/\.mp4$/, '') + `_${q.replace(/[^\w]+/g, '_')}.png`; await p.screenshot({ path: f }); console.log('frame', f); await ctx.close(); }
+  await browser.close(); server.close(); process.exit(0);
+}
 if (args.stills) {
   const { ctx, p } = await page();
   for (const t of args.stills.split(',')) { await p.evaluate(t => window.seek(+t), t); const f = out.replace(/\.mp4$/, '') + `_${t}.jpg`; await p.screenshot({ path: f, type: 'jpeg', quality: 92 }); console.log('still', f); }
@@ -61,7 +69,7 @@ await Promise.all(Array.from({ length: N }, async (_, w) => {
 await browser.close(); server.close();
 const missing = Array.from({ length: total }, (_, i) => i).filter(i => !fs.existsSync(`${fd}/f${String(i).padStart(6, '0')}.jpg`));
 if (missing.length) { console.error('missing sub-frames', missing.slice(0, 10)); process.exit(1); }
-const vf = (SUB > 1 ? `tmix=frames=${SUB},select='eq(mod(n\\,${SUB})\\,${SUB - 1})',setpts=N/(${FPS}*TB),` : '') + 'scale=1920:1080:flags=lanczos';
+const vf = (SUB > 1 ? `tmix=frames=${SUB},select='eq(mod(n\\,${SUB})\\,${SUB - 1})',setpts=N/(${FPS}*TB),` : '') + `scale=${W}:${H}:flags=lanczos`;
 execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-framerate', String(FPS * SUB), '-i', `${fd}/f%06d.jpg`, '-vf', vf, '-r', String(FPS),
   '-c:v', 'libx264', '-crf', '14', '-preset', 'slow', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out]);
 fs.rmSync(fd, { recursive: true, force: true });

@@ -4,7 +4,9 @@ Some films are best made without footage: a brand/launch spot where the product'
 designed moments. This track produces those films as code (HTML/CSS + `motion/kit.js`), renders them
 frame-exact with real motion blur, mixes music and sound design, and gates delivery on deterministic QA.
 
-The worked example is `examples/motion-sweat-ident/` (Sweat, "Let us sweat for you", 33 s). The founder's
+Worked examples: `examples/motion-sweat-ident/` (Sweat, "Let us sweat for you", 16:9, 33 s, the approved
+benchmark) and `examples/motion-sweat-nightshift/` (a boundary test: vertical 9:16, 21 s, a different concept,
+look, motion language, score and per-film sound palette). The founder's
 verdict after 13 iterations was "this is sooo good". Everything below is what it took to get there.
 
 ## The method (do not skip steps)
@@ -12,8 +14,9 @@ verdict after 13 iterations was "this is sooo good". Everything below is what it
 1. **Brief in one breath.** Who buys, the two or three things they must remember, and the one feeling.
    Write the value-led close line first (e.g. "Let us sweat for you."), not a clever negative
    ("Don't post the job" was rejected as not value-led).
-2. **Style frames before animation.** Design 2 to 3 genuinely different directions as stills
-   (`motion.py stills`), 3 frames each: hook, proof, close. Show them. Ask which frames the founder likes and
+2. **Style frames before animation.** Design 2 to 3 genuinely different directions as stills in
+   `styleframes.html` (one section per frame, selected by `?f=`), 2 to 3 frames each: hook, proof, close.
+   Render them with `motion.py styleframes <project> f=A1 f=A2 f=B1 ...` (writes a sheet). Show them. Ask which frames the founder likes and
    dislikes, and why. Animating before a direction is chosen wasted hours in the example.
 3. **Lock the timeline.** A scene table (`SC`) with second-accurate boundaries. Music and every sound
    cue are timed to it, so later polish never breaks sync.
@@ -32,6 +35,9 @@ Pick contrasting ones for the style frames; invent new ones when the brand calls
 | **Ident** (chosen for Sweat) | Solid colour blocks (hot accent / ink / cream), huge grotesque cropped off-frame (Bricolage 800, tight tracking), pills with flat offset shadows, roundels, ✕ / ✓ verdict discs, hard colour-block wipes | Confident startup launch, punchy social cut |
 | Editorial | Paper stock + grain, large serif with italics (Instrument Serif), hairline rules, ledgers, ink stamps | Premium, calm, trust-heavy brands (founder of Sweat disliked it for Sweat) |
 | Kinetic UI | Dark charcoal, one accent, redrawn product objects (specimen docs, check lists, analyst card), measured AI callouts | Product-proof heavy films |
+| Night blueprint (example 2) | Deep navy grid, cyan line art drawn on by stroke reveals, monospace logs, one amber signal, night-to-dawn sky | Stories about time, overnight work, reliability |
+| Swiss poster | Off-white, signal red block, strict grid, huge numerals | Bold data-led statements |
+| Paper cut | Pastel paper layers with soft shadows, friendly rounded type | Warm, human, consumer-facing brands |
 | Soft 3D | Real 3D plates (Blender scripts) composited under 2D type | Only when the brand is tactile; costs time |
 
 ## Craft rules (from Ben Marriott's commentary and the founder's feedback)
@@ -51,7 +57,10 @@ Pick contrasting ones for the style frames; invent new ones when the brand calls
 - **Analogue finish, lightly.** Grain overlay; nothing that takes over.
 - **Transitions are designed.** Colour-block wipes from a direction (`sceneWipes()`), never a generic fade.
 - **Sound on every hit.** A cue sheet (`cues.json`) with one cue per visible event; one music bed with its
-  drop landing on the turn (`musicOffsetSec` aligns them).
+  drop landing on the turn (`musicOffsetSec` aligns them). A new film deserves its own sound: write
+  `musicPrompt` (instruments, BPM, timed structure, no artist names; the provider rejects them) and
+  `sfxPrompts`, then `motion.py music` and `motion.py sfx` (palette in `<project>/sfx`, `sfxDir: "sfx"`).
+  Map the bed's energy before placing the offset; beds often open with a silent fade-in.
 
 ## Never again (rejected in the example)
 
@@ -70,6 +79,9 @@ Pick contrasting ones for the style frames; invent new ones when the brand calls
 
 - `window.DUR` seconds; `window.seek(t)` renders the full frame for `t`, deterministically, from any order.
   No clocks, no requestAnimationFrame, seeded randomness only. Never give an element `id="ready"`.
+- Frame size: 1920x1080 by default; declare `window.SIZE = [1080, 1920]` for vertical (any even size).
+- Every scene container must fill the stage (`inset:0`). An absolutely positioned container without a size
+  makes its text wrap at nearly zero width (every word on its own line).
 - Fonts come from `motion/fonts/fonts.css` (OFL, bundled) so headless renders match.
 - Avoid expensive CSS in every frame (`backdrop-filter`, stacked large blurs): it made one render 4x
   slower for an effect nobody could see.
