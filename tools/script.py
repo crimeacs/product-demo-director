@@ -21,7 +21,7 @@ import argparse, json, os, re, shutil, subprocess, sys
 from contracts import SAVE_THE_CAT_BEATS, validate_script as validate_contract
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ANTHROPIC_MODEL = os.environ.get("PDD_DRAFT_MODEL", "claude-fable-5-1")
+ANTHROPIC_MODEL = os.environ.get("PDD_DRAFT_MODEL", "claude-opus-5-5")
 ANTHROPIC_EFFORT = os.environ.get("PDD_DRAFT_EFFORT", "high")
 GEMINI_MODEL = os.environ.get("PDD_DRAFT_GEMINI_MODEL", "gemini-3.1-pro-preview")
 ALLOWED_KINDS = ("title", "clip", "split", "stat", "cta", "score", "bars", "strip")
@@ -119,8 +119,9 @@ def llm_json(system, user):
         try:
             import anthropic
             c = anthropic.Anthropic()
-            # Claude Fable 5.1: thinking is always on (adaptive), sampling params are rejected,
-            # depth is set with effort; server-side fallbacks rescue a policy decline in-call.
+            # Claude Opus 5.5: thinking is always on (adaptive), sampling params are rejected,
+            # depth is set with effort (pinned high; the model defaults to medium); server-side
+            # fallbacks rescue a policy decline in-call.
             with c.beta.messages.stream(
                 model=ANTHROPIC_MODEL, max_tokens=32000, system=system,
                 messages=[{"role": "user", "content": user}],
