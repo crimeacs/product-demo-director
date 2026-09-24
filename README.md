@@ -53,10 +53,6 @@ QA-checked file.
 <table>
 <tr>
 <td width="50%"><a href="examples/save-the-cat/README.md"><img src="docs/assets/gallery-save-the-cat.jpg" alt="Save the Cat announcement"></a><br><b>The one-minute announcement</b><br><sub>Product film · Codex turns raw footage and verified inputs into a directed demo</sub></td>
-<td width="50%"><a href="examples/motion-sweat-ident/README.md"><img src="docs/assets/gallery-sweat-ident.jpg" alt="Let us sweat for you"></a><br><b>"Let us sweat for you."</b><br><sub>Motion graphics · 33 s launch spot for a KYB startup, approved after 13 iterations</sub></td>
-</tr>
-<tr>
-<td width="50%"><a href="examples/motion-sweat-nightshift/README.md"><img src="docs/assets/gallery-sweat-nightshift.jpg" alt="Onboarding that never clocks out"></a><br><b>"Onboarding that never clocks out."</b><br><sub>Motion graphics · 9:16 vertical, blueprint direction, its own score</sub></td>
 <td width="50%"><a href="examples/motion-pdd-self/README.md"><img src="docs/assets/gallery-pdd-self.jpg" alt="Evidence in. A directed film out."></a><br><b>"Evidence in. A directed film out."</b><br><sub>Motion graphics · this repository's own film, in the cutting-room direction</sub></td>
 </tr>
 </table>

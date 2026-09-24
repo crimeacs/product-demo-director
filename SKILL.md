@@ -19,7 +19,7 @@ motion-graphics track: read `docs/MOTION_GRAPHICS.md` completely, then follow it
 animate only the direction the founder picks. Build with `motion/kit.js` (hits `pop()`, flows `glide()`,
 measured `callout()`, colour-block `sceneWipes()`), keep a locked scene timeline for music and cues, and
 deliver through `tools/motion.py all` (motion-blurred render, mix, QA). Study
-`examples/motion-sweat-ident/` before designing: it is the approved benchmark. Never fall back to busy
+`examples/motion-pdd-self/` before designing: it is the worked example. Never fall back to busy
 product screenshots, a TTS narrator, AI-generated footage, or generic dark/light UI themes for this track.
 
 The motion engine is a single props-driven Remotion composition, so one pipeline renders many
