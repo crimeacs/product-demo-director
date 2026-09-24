@@ -16,6 +16,7 @@ drive the production workflow, but must not become a substitute for product proo
   narration, source locks, camera continuity, artifact binding, or delivery gates.
 - Read `docs/CAPTURE.md` before recording a browser, terminal, or agent-operated workflow.
 - Read `docs/EDITING.md` before making editorial or pacing decisions.
+- Read `docs/MOTION_GRAPHICS.md` before making a motion-graphics (no footage) brand or launch film.
 - Read `CONTRIBUTING.md` before changing repository code or opening a pull request.
 
 Keep this file concise. Put detailed production rules in the documents above and update the closest
