@@ -42,6 +42,27 @@ def _last_trailing_silence(text, duration, tolerance=0.25):
     return start if duration - start >= 0.7 else None
 
 
+def _silent_gaps(text, max_gap=1.5):
+    """Silences longer than max_gap seconds from ffmpeg silencedetect output, as (start, end)."""
+    starts = [float(x) for x in re.findall(r"silence_start:\s*(-?[0-9.]+)", text)]
+    ends = [float(x) for x in re.findall(r"silence_end:\s*([0-9.]+)", text)]
+    return [(max(0.0, a), b) for a, b in zip(starts, ends) if b - max(0.0, a) > max_gap]
+
+
+def assert_audible_bed(path, requested_seconds, reserve_seconds=2.5):
+    """A bed must be audible under the whole picture: fail loudly on any long silent gap inside
+    the timeline (the tail reserve is handled by ensure_audible_timeline_tail)."""
+    detected = subprocess.run(["ffmpeg", "-hide_banner", "-i", path, "-af",
+                               "silencedetect=noise=-50dB:d=1.5", "-f", "null", "-"],
+                              capture_output=True, text=True)
+    timeline = max(0.0, requested_seconds - reserve_seconds)
+    gaps = [(a, b) for a, b in _silent_gaps(detected.stderr) if a < timeline - 0.7]
+    if gaps:
+        spans = ", ".join(f"{a:.1f}-{b:.1f}s" for a, b in gaps)
+        raise SystemExit(f"FAILED music bed is silent inside the timeline ({spans}); "
+                         "make the affected musicSections audible (styles, not silence) and rerun")
+
+
 def ensure_audible_timeline_tail(path, requested_seconds, reserve_seconds=2.5):
     """Repair model-generated beds that stop musically before the picture ends.
 
@@ -141,10 +162,22 @@ def composition_plan(script, seconds, model=None):
                 "sections": [{"section_name": name, "positive_local_styles": list(sec.get("styles") or []),
                               "negative_local_styles": list(sec.get("avoid") or []) + NO_VOCALS,
                               "duration_ms": duration, "lines": []} for name, sec, duration in spans]}
-    return {"chunks": [{"text": f"[{name}]\n{{instrumental}}", "duration_ms": duration,
+    return {"chunks": [{"text": f"[{name}]\n{{instrumental, audible from the first beat}}", "duration_ms": duration,
                         "positive_styles": mood + list(sec.get("styles") or []) + ["instrumental"],
-                        "negative_styles": list(sec.get("avoid") or []) + NO_VOCALS,
+                        "negative_styles": list(sec.get("avoid") or []) + NO_VOCALS + ["silence"],
                         "context_adherence": "high"} for name, sec, duration in spans]}
+
+
+def timed_prompt(script, seconds, base):
+    """Fold musicSections into one prompt with explicit timestamps (prompt-mode fallback)."""
+    parts, start = [], 0.0
+    for index, sec in enumerate(script.get("musicSections") or []):
+        end = seconds if index == len(script["musicSections"]) - 1 else float(sec["untilSec"])
+        parts.append(f"{int(start)//60}:{int(start)%60:02d}-{int(end)//60}:{int(end)%60:02d} "
+                     f"{sec.get('name', '')}: {', '.join(sec.get('styles') or [])}")
+        start = end
+    timeline = "; ".join(parts)
+    return (base.split(BED_SUFFIX)[0][:300] + ". Structure: " + timeline)[:1900] + BED_SUFFIX
 
 
 def gen_elevenlabs(prompt, seconds, out, plan=None):
@@ -233,11 +266,22 @@ def main():
     prompt = (script.get("music") or DEFAULT_MOOD)[:480] + BED_SUFFIX
     seconds = target_seconds(args, script)
     out = os.path.join(args.project, "music.mp3")
+    plan = composition_plan(script, seconds) if provider == "elevenlabs" else None
     if provider == "elevenlabs":
-        gen_elevenlabs(prompt, seconds, out, composition_plan(script, seconds))
+        gen_elevenlabs(prompt, seconds, out, plan)
     else:
         gen_lyria(prompt, seconds, out)
     repaired = ensure_audible_timeline_tail(out, seconds)
+    if plan:
+        try:
+            assert_audible_bed(out, seconds)
+        except SystemExit as exc:
+            # Observed 2026-09-23: music_v2 chunk plans can open with 10-15 s of digital
+            # silence. Retry once as a prompt that narrates the same section timeline.
+            print(f"music: composition plan rejected ({exc}); retrying as a timed prompt")
+            gen_elevenlabs(timed_prompt(script, seconds, prompt), seconds, out, None)
+            repaired = ensure_audible_timeline_tail(out, seconds)
+    assert_audible_bed(out, seconds)
     dur = f"{_duration(out):.6f}"
     if repaired:
         print("music: repaired provider's early silent outro with a crossfaded tail")
