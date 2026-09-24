@@ -11,6 +11,17 @@ per-shot TTS, one continuous generated performance, or one locked human narratio
 It binds every render to source hashes and integer frame boundaries, runs deterministic delivery QA,
 then lets a Gemini judge review story and taste.
 
+## Motion-graphics films (no footage)
+
+When the ask is a launch, brand or "slick, punchy, studio-level" ad rather than a footage demo, use the
+motion-graphics track: read `docs/MOTION_GRAPHICS.md` completely, then follow its method in order.
+**Style frames first**: design 2 to 3 contrasting directions as stills (hook, proof, close), show them, and
+animate only the direction the founder picks. Build with `motion/kit.js` (hits `pop()`, flows `glide()`,
+measured `callout()`, colour-block `sceneWipes()`), keep a locked scene timeline for music and cues, and
+deliver through `tools/motion.py all` (motion-blurred render, mix, QA). Study
+`examples/motion-sweat-ident/` before designing: it is the approved benchmark. Never fall back to busy
+product screenshots, a TTS narrator, AI-generated footage, or generic dark/light UI themes for this track.
+
 The motion engine is a single props-driven Remotion composition, so one pipeline renders many
 cuts (teaser, walkthrough, race, full demo) from the same assets.
 

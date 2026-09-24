@@ -1,0 +1,19 @@
+{
+ "film": "film.html",
+ "music": "music.mp3",
+ "musicOffsetSec": 2.0,
+ "musicVolume": 0.55,
+ "musicLengthSec": 32,
+ "musicPrompt": "Upbeat indie electronic launch track, 116 BPM, crisp live-sounding drums, warm electric bass, bright staccato piano chords, playful and confident, instrumental. Structure: 0:00-0:04 a short intro with a rhythmic ticking like a film projector, then a hit at 0:04; 0:04-0:15 driving groove with the piano hook; 0:15-0:21 breakdown, drums drop to a steady kick, airy and cinematic; 0:21-0:26 groove returns, building; 0:26-0:31 final full chorus ending on one clean final hit with a short natural tail.",
+ "sfxDir": "sfx",
+ "sfxPrompts": {
+  "clap": {"prompt": "wooden film clapperboard clap, crisp and close, single snap", "seconds": 0.5},
+  "thud": {"prompt": "short punchy deep typographic impact, soft low thump, modern motion graphics", "seconds": 0.5},
+  "whoosh": {"prompt": "fast clean airy whoosh transition, short", "seconds": 0.6},
+  "pop": {"prompt": "soft rounded bubble pop, playful UI, short", "seconds": 0.5},
+  "tick": {"prompt": "tiny crisp tick, clean UI click", "seconds": 0.5},
+  "snap": {"prompt": "satisfying magnetic snap into place, short metallic click", "seconds": 0.5},
+  "projector": {"prompt": "vintage film projector running, soft mechanical clatter", "seconds": 4.5},
+  "print": {"prompt": "small thermal receipt printer printing, soft whirr", "seconds": 2.2}
+ }
+}

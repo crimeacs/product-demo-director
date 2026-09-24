@@ -1,0 +1,195 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Product Demo Director</title>
+<link rel="stylesheet" href="../../motion/fonts/fonts.css">
+<script src="../../motion/kit.js"></script>
+<style>
+:root{--paper:#efeae0;--ink:#111;--vio:#6d5dfc;--tape:#ffd23f;--red:#ff3b30;--dim:#dcd5c7}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#000}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--paper);font-family:'Inter Tight',sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+.abs{position:absolute}.sc{position:absolute;inset:0;overflow:hidden;visibility:hidden}
+.n{font-weight:900;letter-spacing:-.06em;line-height:.84;white-space:nowrap}
+.m{font-family:'Plex';font-size:22px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.spr{position:absolute;left:-104px;width:2128px;height:44px;background:var(--ink);z-index:80;
+  background-image:radial-gradient(circle at 20px 22px,var(--paper) 0 9px,transparent 10px);background-size:52px 44px}
+.hud{position:absolute;z-index:81}
+.trk{position:absolute;height:64px;border-radius:10px}
+.chip{position:absolute;height:92px;padding:0 34px;border-radius:46px;background:#fff;border:3px solid var(--ink);box-shadow:8px 8px 0 var(--ink);
+  display:flex;align-items:center;gap:18px;font-weight:700;font-size:38px;letter-spacing:-.02em;white-space:nowrap}
+.chip .k{font-family:'Plex';font-size:20px;letter-spacing:.06em;color:#6b655a;text-transform:uppercase}
+.wv{position:absolute;bottom:0;width:8px;border-radius:4px;background:var(--ink)}
+.word{position:absolute;font-weight:700;font-size:34px;letter-spacing:-.02em;white-space:nowrap}
+.frm{position:absolute;width:560px;height:315px;border-radius:14px;overflow:hidden;background:#000;box-shadow:0 0 0 10px var(--ink)}
+.frm img{width:100%;height:100%;object-fit:cover;display:block}
+.rl{position:absolute;left:0;width:760px;display:flex;justify-content:space-between;font-family:'Plex';font-size:28px;letter-spacing:.02em;white-space:nowrap}
+.rl b{color:var(--vio)}
+.grain{position:absolute;inset:0;pointer-events:none;z-index:90;opacity:.09;mix-blend-mode:multiply;
+  background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' seed='4'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+</style></head><body><div id="stage">
+
+<!-- s1 slate + hook -->
+<section class="sc" id="s1">
+  <div class="abs" id="slate" style="left:1500px;top:230px;width:560px;height:430px;transform-origin:0 0;zoom:.9">
+    <div class="abs" id="clap" style="left:0;top:0;width:560px;height:90px;background:repeating-linear-gradient(120deg,var(--ink) 0 56px,var(--paper) 56px 112px);border:6px solid var(--ink);border-radius:10px;transform-origin:6px 84px"></div>
+    <div class="abs" style="left:0;top:100px;width:560px;height:330px;background:var(--ink);border-radius:10px;padding:34px;color:var(--paper)">
+      <div class="m" style="color:#8f887a">Production</div>
+      <div style="font-weight:800;font-size:46px;letter-spacing:-.03em;margin:8px 0 26px">Your launch film</div>
+      <div style="display:flex;gap:60px"><div><div class="m" style="color:#8f887a">Scene</div><div class="n" style="font-size:96px">01</div></div>
+      <div><div class="m" style="color:#8f887a">Take</div><div class="n" style="font-size:96px">01</div></div>
+      <div><div class="m" style="color:#8f887a">Director</div><div style="font-weight:800;font-size:40px;margin-top:22px">an agent</div></div></div>
+    </div>
+  </div>
+  <div class="abs n" id="h1a" style="left:84px;top:250px;font-size:186px;transform-origin:0 100%">Your product</div>
+  <div class="abs n" id="h1b" style="left:84px;top:420px;font-size:186px;transform-origin:0 100%">has a story.</div>
+  <div class="abs" id="tl1" style="left:90px;top:760px;width:1740px;height:150px">
+    <div class="trk" id="t1a" style="left:0;top:0;width:420px;background:var(--ink)"></div>
+    <div class="trk" id="t1b" style="left:430px;top:0;width:260px;background:var(--vio)"></div>
+    <div class="trk" id="t1c" style="left:700px;top:0;width:520px;background:var(--ink)"></div>
+    <div class="trk" id="t1d" style="left:1230px;top:0;width:510px;background:var(--tape)"></div>
+    <div class="trk" id="t1e" style="left:0;top:80px;width:1740px;background:var(--dim)"></div>
+    <div class="abs" id="ph1" style="left:0;top:-26px;width:4px;height:196px;background:var(--red)"></div>
+  </div>
+</section>
+
+<!-- s2 evidence in -->
+<section class="sc" id="s2" style="background:var(--paper)">
+  <div class="abs n" id="h2" style="left:84px;top:150px;font-size:180px;transform-origin:0 100%">Evidence in.</div>
+  <div class="abs m" id="h2s" style="left:92px;top:340px;color:#6b655a">Give Claude Code or Codex what you already have</div>
+  <div class="chip" id="c1" style="left:92px;top:470px"><span class="k">spec</span>product.json</div>
+  <div class="chip" id="c2" style="left:92px;top:600px"><span class="k">live app</span>app.yourco.com</div>
+  <div class="chip" id="c3" style="left:92px;top:730px"><span class="k">cli</span>$ yourco deploy</div>
+  <div class="chip" id="c4" style="left:92px;top:860px"><span class="k">brand</span>palette · font · logo</div>
+  <div class="abs" id="dir" style="left:1080px;top:430px;width:720px;height:520px;background:var(--ink);border-radius:22px;color:var(--paper);padding:44px">
+    <div class="m" style="color:#8f887a">The director</div>
+    <div id="steps" style="margin-top:22px;font-family:'Plex';font-size:30px;line-height:1.72"></div>
+  </div>
+</section>
+
+<!-- s3 speech controls picture -->
+<section class="sc" id="s3" style="background:var(--tape)">
+  <div class="abs n" id="h3" style="left:84px;top:130px;font-size:170px;transform-origin:0 100%">Speech controls<br>picture.</div>
+  <div class="abs" id="ed" style="left:90px;top:560px;width:1740px;height:400px">
+    <div class="abs m" style="left:0;top:0">Picture</div>
+    <div class="trk" id="p1" style="top:40px;background:var(--ink)"></div>
+    <div class="trk" id="p2" style="top:40px;background:var(--vio)"></div>
+    <div class="trk" id="p3" style="top:40px;background:var(--ink)"></div>
+    <div class="abs m" style="left:0;top:140px">Narration</div>
+    <div class="abs" id="wave" style="left:0;top:180px;width:1740px;height:110px"></div>
+    <div id="words"></div>
+    <div class="abs" id="cut1" style="top:20px;width:6px;height:300px;background:var(--red);border-radius:3px"></div>
+    <div class="abs" id="cut2" style="top:20px;width:6px;height:300px;background:var(--red);border-radius:3px"></div>
+  </div>
+  <div class="abs m" id="h3s" style="left:92px;top:990px">Cuts land between complete thoughts, never mid-word</div>
+</section>
+
+<!-- s4 motion graphics track -->
+<section class="sc" id="s4" style="background:var(--ink);color:var(--paper)">
+  <div class="abs n" id="h4" style="left:84px;top:150px;font-size:170px;transform-origin:0 100%">No footage?</div>
+  <div class="abs n" id="h4b" style="left:84px;top:300px;font-size:170px;color:var(--tape);transform-origin:0 100%">Motion graphics.</div>
+  <div class="abs" id="strip" style="left:0;top:560px;height:420px;width:2800px">
+    <div class="abs" style="left:0;top:0;width:2800px;height:420px;background:#000"></div>
+    <div class="abs" style="left:0;top:14px;width:2800px;height:22px;background-image:radial-gradient(circle at 16px 11px,#3a3a3a 0 7px,transparent 8px);background-size:44px 22px"></div>
+    <div class="abs" style="left:0;bottom:14px;width:2800px;height:22px;background-image:radial-gradient(circle at 16px 11px,#3a3a3a 0 7px,transparent 8px);background-size:44px 22px"></div>
+    <div class="frm" style="left:60px;top:52px"><img src="img/v13_2.0.jpg"></div>
+    <div class="frm" style="left:680px;top:52px"><img src="img/v13_9.5.jpg"></div>
+    <div class="frm" style="left:1300px;top:52px"><img src="img/v13_18.5.jpg"></div>
+    <div class="frm" style="left:1920px;top:52px"><img src="img/v13_30.5.jpg"></div>
+  </div>
+  <div class="abs m" id="h4s" style="left:92px;top:1000px;color:#8f887a">Style frames first · built as code · real motion blur · frames from a film it made</div>
+</section>
+
+<!-- s5 receipts -->
+<section class="sc" id="s5" style="background:var(--paper)">
+  <div class="abs" id="vblk" style="left:0;top:0;width:900px;height:1080px;background:var(--vio)"></div>
+  <div class="abs n" id="h5a" style="left:90px;top:300px;font-size:230px;color:var(--paper);transform-origin:0 100%">Cut.</div>
+  <div class="abs n" id="h5b" style="left:90px;top:500px;font-size:230px;color:var(--paper);transform-origin:0 100%">Print.</div>
+  <div class="abs n" id="h5c" style="left:1010px;top:170px;font-size:92px">Ship the exact file<br>it checked.</div>
+  <div class="abs" id="rcpt" style="left:1010px;top:430px;width:800px;height:520px;background:#fff;border-radius:14px;box-shadow:10px 10px 0 var(--ink);border:3px solid var(--ink);overflow:hidden">
+    <div class="abs" style="left:20px;top:26px" id="rlines"></div>
+  </div>
+</section>
+
+<!-- s6 close -->
+<section class="sc" id="s6" style="background:var(--paper)">
+  <div class="abs n" id="h6a" style="left:84px;top:230px;font-size:190px;transform-origin:0 100%">Evidence in.</div>
+  <div class="abs n" id="h6b" style="left:84px;top:420px;font-size:190px;color:var(--vio);transform-origin:0 100%">A directed film out.</div>
+  <div class="abs" id="h6c" style="left:92px;top:700px;font-weight:800;font-size:58px;letter-spacing:-.03em">Product Demo Director</div>
+  <div class="abs m" id="h6d" style="left:92px;top:790px;color:#6b655a">A skill for Claude Code and Codex · MIT · github.com/crimeacs/product-demo-director</div>
+</section>
+
+<div class="spr" id="sprT" style="top:0"></div><div class="spr" id="sprB" style="bottom:0"></div>
+<div class="hud m" id="hudL" style="left:90px;top:64px">Product Demo Director</div>
+<div class="hud m" id="hudR" style="right:90px;top:64px">TC 00:00:00:00</div>
+<div class="grain"></div>
+<div class="abs" id="black" style="inset:0;background:#000;opacity:0;z-index:95"></div>
+</div>
+<script>
+const {$,cl,P,L,eo,eio,S,pop,glide,sceneWipes,wobble,squash}=MK;
+const SC=[['s1',0,4.2],['s2',4.2,9.4],['s3',9.4,15.4],['s4',15.4,20.6],['s5',20.6,25.8],['s6',25.8,30.5]];
+window.DUR=30.5;
+// s2 steps
+const STEPS=['onboard  brand from the URL','shoot    the states that matter','script   the story, one change','vo       narration, performed','pace     cuts between thoughts','render   full-frame, zooms, sfx','qa       prove the file'];
+$('steps').innerHTML=STEPS.map((s,i)=>`<div id="st${i}" style="white-space:pre"><span id="sk${i}" style="display:inline-block;width:44px;color:#ffd23f">·</span>${s.replace(/^(\w+)/,'<b style="color:#fff">$1</b>')}</div>`).join('');
+// s3 waveform: three thoughts separated by gaps
+const W=1740, GAP=[[540,640],[1120,1220]];
+let wv='';for(let i=0;i<174;i++){const x=i*10;const inGap=GAP.some(([a,b])=>x>a&&x<b);const h=inGap?4:22+Math.abs(Math.sin(i*1.7)*Math.cos(i*.37))*84;wv+=`<div class="wv" style="left:${x}px;height:${h}px;bottom:0"></div>`}
+$('wave').innerHTML=wv;
+const WORDS=[['Find the change.',20],['Show the proof.',660],['Ship the film.',1240]];
+$('words').innerHTML=WORDS.map((w,i)=>`<div class="word" id="w${i}" style="left:${w[1]}px;top:310px">“${w[0]}”</div>`).join('');
+// s5 receipt
+const RL=[['source + claims','sha256 bound'],['story','locked'],['frames','exact'],['decode','full file'],['loudness','gated'],['black frames','gated'],['silence','gated'],['narration','continuous']];
+$('rlines').innerHTML=RL.map((r,i)=>`<div class="rl" id="r${i}" style="top:${i*58}px"><span>${r[0]}</span><span>${r[1]} <b id="rk${i}">✓</b></span></div>`).join('');
+function tc(t){const f=Math.floor(t*24)%24,s=Math.floor(t)%60;return `TC 00:00:${String(s).padStart(2,'0')}:${String(f).padStart(2,'0')}`}
+function seek(t){
+  sceneWipes(t,SC,{s2:[1,0],s3:[0,-1],s4:[-1,0],s5:[1,0],s6:[0,1]});
+  // persistent chrome: sprockets run like film through a gate
+  const run=(t*260)%52;$('sprT').style.transform=`translateX(${run}px)`;$('sprB').style.transform=`translateX(${-run}px)`;
+  $('hudR').textContent=tc(t);
+  const dark=t>=15.4-.15&&t<20.6-.15;$('hudL').style.color=$('hudR').style.color=dark?'#8f887a':'#111';
+  // s1
+  const u1=t;
+  glide('slate',u1,.05,{dx:120,dy:-40,r0:6,r:-2,d:.6});
+  const cl1=u1<.75?-22*eo(P(u1,.05,.5)):-22*(1-eio(P(u1,.75,.86)));$('clap').style.transform=`rotate(${cl1}deg)`;
+  $('slate').style.transform+=` translateY(${wobble(u1,.86,10,20,6)}px)`;
+  pop('h1a',u1,1.0,{from:.4,dy:40});pop('h1b',u1,1.3,{from:.4,dy:40});
+  ['t1a','t1b','t1c','t1d','t1e'].forEach((id,i)=>{const k=eo(P(u1,.3+i*.12,.9+i*.12));$(id).style.clipPath=`inset(0 ${(1-k)*100}% 0 0)`});
+  $('ph1').style.left=L(0,1740,eio(P(u1,1.6,4.1)))+'px';
+  // s2
+  const u2=t-4.2;
+  pop('h2',u2,.1,{from:.5,dy:40});S('h2s',{op:P(u2,.5,.8),y:(1-eo(P(u2,.5,1)))*14});
+  ['c1','c2','c3','c4'].forEach((id,i)=>{const a=.6+i*.25;const fly=eio(P(u2,2.6+i*.18,3.3+i*.18));
+    glide(id,u2,a,{dx:-80,dy:30,r0:-3,d:.7});const el=$(id);
+    el.style.transform=`translate(${L(0,1010,fly)}px,${L(0,(1-i)*60+120-i*20,fly)}px) scale(${L(1,.35,fly)}) rotate(${L(0,8,fly)}deg)`;el.style.opacity=u2<.6+i*.25?0:1-P(u2,3.1+i*.18,3.35+i*.18)});
+  glide('dir',u2,1.0,{dx:80,dy:0,d:.8});
+  const k2=wobble(u2,3.2,8,18,5);$('dir').style.transform+=` translateY(${k2}px)`;
+  STEPS.forEach((_,i)=>{const a=3.3+i*.24;S('st'+i,{op:u2<a?.25:1,x:u2<a?0:(1-eo(P(u2,a,a+.3)))*20});$('sk'+i).textContent=u2>=a+.15?'✓':'·'});
+  // s3
+  const u3=t-9.4;
+  pop('h3',u3,.1,{from:.5,dy:40});S('h3s',{op:P(u3,3.9,4.3)});
+  S('wave',{op:1});$('wave').style.clipPath=`inset(0 ${(1-eio(P(u3,.5,1.8)))*100}% 0 0)`;
+  WORDS.forEach((w,i)=>S('w'+i,{op:P(u3,.8+i*.35,1.1+i*.35),y:(1-eo(P(u3,.8+i*.35,1.3+i*.35)))*16}));
+  // cuts start mid-word, then snap into the gaps
+  const sn1=P(u3,2.3,2.75),sn2=P(u3,2.8,3.25);
+  const c1=L(420,590,MK.back(sn1)),c2=L(1330,1170,MK.back(sn2));
+  $('cut1').style.left=c1+'px';$('cut2').style.left=c2+'px';
+  S('cut1',{op:P(u3,1.7,1.9),sx:1+squash(u3,2.72)*.8});S('cut2',{op:P(u3,1.8,2.0),sx:1+squash(u3,3.22)*.8});
+  const lay=[[0,c1-6],[c1+4,c2-6],[c2+4,1740]];['p1','p2','p3'].forEach((id,i)=>{$(id).style.left=lay[i][0]+'px';$(id).style.width=(lay[i][1]-lay[i][0])+'px';
+    $(id).style.clipPath=`inset(0 ${(1-eo(P(u3,.3+i*.1,.9+i*.1)))*100}% 0 0)`});
+  // s4
+  const u4=t-15.4;
+  pop('h4',u4,.1,{from:.5,dy:40});pop('h4b',u4,.55,{from:.5,dy:40});
+  $('strip').style.transform=`translateX(${L(300,-760,P(u4,.2,5.4))}px) rotate(-2deg)`;S('h4s',{op:P(u4,1.2,1.6)});
+  // s5
+  const u5=t-20.6;
+  $('vblk').style.transform=`translateX(${(1-eio(P(u5,-.3,.4)))*-900}px)`;
+  pop('h5a',u5,.35,{from:.3,dy:30});pop('h5b',u5,.7,{from:.3,dy:30});S('h5c',{op:P(u5,1.0,1.3),y:(1-eo(P(u5,1,1.5)))*20});
+  glide('rcpt',u5,1.1,{dx:0,dy:80,d:.6});
+  RL.forEach((_,i)=>{const a=1.6+i*.3;S('r'+i,{op:P(u5,a,a+.12),y:(1-eo(P(u5,a,a+.35)))*12});pop('rk'+i,u5,a+.12,{from:.2})});
+  // s6
+  const u6=t-25.8;
+  pop('h6a',u6,.15,{from:.5,dy:40});pop('h6b',u6,.6,{from:.5,dy:40});
+  S('h6c',{op:P(u6,1.3,1.6),y:(1-eo(P(u6,1.3,1.8)))*18});S('h6d',{op:P(u6,1.6,1.9)});
+  $('black').style.opacity=P(t,DUR-.5,DUR);
+}
+window.seek=seek;seek(0);
+</script></body></html>

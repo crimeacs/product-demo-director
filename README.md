@@ -17,7 +17,9 @@ narration, direct a full-frame edit, render, finish, and verify the delivery.
 It's a [Claude Code](https://claude.com/claude-code) skill (see [`SKILL.md`](./SKILL.md)) and a
 standalone pipeline — drive it by hand or hand the whole loop to an agent.
 
-[![Codex turns product evidence into a directed, source-bound demo](docs/assets/product-demo-director-demo.gif)](https://github.com/crimeacs/product-demo-director/releases/latest)
+[![Evidence in. A directed film out. Product Demo Director's own film, made with its motion-graphics track](docs/assets/product-demo-director-demo.gif)](examples/motion-pdd-self/README.md)
+
+*This repository's own film, made with the motion-graphics track ([how it was made](examples/motion-pdd-self/README.md)).*
 
 ### Why it is different
 
@@ -27,6 +29,9 @@ standalone pipeline — drive it by hand or hand the whole loop to an agent.
   visual runway; cuts land between ideas instead of clipping them.
 - **The shipped file carries receipts.** Source and claim hashes, exact frames, final-media decode,
   loudness, black/silence checks, and narration continuity are bound to the delivery artifact.
+- **Or no footage at all.** The motion-graphics track builds a designed launch film as code: style
+  frames first, frame-exact renders with real motion blur, a per-film score and sound palette, and QA
+  gates ([`docs/MOTION_GRAPHICS.md`](docs/MOTION_GRAPHICS.md), `tools/motion.py`).
 
 The [one-minute repository announcement](examples/save-the-cat/README.md) is made by the repository
 itself. A clearly labeled, reproducible workbench replay shows Codex driving the pipeline; the final

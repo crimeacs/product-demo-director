@@ -1,0 +1,43 @@
+{
+ "film": "film.html",
+ "music": "music.mp3",
+ "musicOffsetSec": 1.6,
+ "musicVolume": 0.6,
+ "musicLengthSec": 24,
+ "musicPrompt": "Late-night minimal electronic score, 88 BPM, soft analog synth pulses, warm Rhodes chords, gentle brushed percussion, deep subtle bass, calm and focused, instrumental. Structure: 0:00-0:03 quiet night ambience with a slow pulse; 0:03-0:11 soft beat enters, steady and precise; 0:11-0:15 warmer, a single lamp-light Rhodes motif; 0:15-0:18 sunrise swell, brighter chords rising; 0:18-0:21 resolved major chord, confident, clean ending with a short natural tail.",
+ "sfxDir": "sfx",
+ "sfxPrompts": {
+  "draw": {
+   "prompt": "very soft pencil line drawing on paper, short airy scribble",
+   "seconds": 0.8
+  },
+  "scan": {
+   "prompt": "gentle futuristic scanner sweep, soft electronic hum rising",
+   "seconds": 0.9
+  },
+  "reject": {
+   "prompt": "soft low muted electronic error blip, two notes descending, tasteful",
+   "seconds": 0.5
+  },
+  "accept": {
+   "prompt": "soft bright two-note confirmation chime, warm, premium UI",
+   "seconds": 0.7
+  },
+  "tick": {
+   "prompt": "tiny soft mechanical relay click, clean",
+   "seconds": 0.3
+  },
+  "lamp": {
+   "prompt": "desk lamp switch click followed by a faint warm hum",
+   "seconds": 0.9
+  },
+  "dawn": {
+   "prompt": "soft ambient swell like sunrise, airy pad rising",
+   "seconds": 1.6
+  },
+  "roll": {
+   "prompt": "quick flip-clock digits rolling, soft mechanical flutter",
+   "seconds": 0.5
+  }
+ }
+}
