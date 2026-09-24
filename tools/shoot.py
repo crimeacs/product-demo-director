@@ -36,7 +36,7 @@ sys.path.insert(0, HERE)  # import sibling tools when run as a script
 import capture  # noqa: E402
 from events import normalize_events_file, transform_events  # noqa: E402,F401
 
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_PLANNER_MODEL", "claude-fable-5-1")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_PLANNER_MODEL", "claude-opus-5-5")
 ANTHROPIC_EFFORT = os.environ.get("ANTHROPIC_PLANNER_EFFORT", "high")
 GEMINI_MODEL = os.environ.get("PDD_PLANNER_GEMINI_MODEL", "gemini-3.1-pro-preview")
 
@@ -65,8 +65,9 @@ def llm_json(system, user):
         try:
             import anthropic
             c = anthropic.Anthropic()
-            # Claude Fable 5.1: thinking is always on (adaptive), sampling params are rejected,
-            # depth is set with effort; server-side fallbacks rescue a policy decline in-call.
+            # Claude Opus 5.5: thinking is always on (adaptive), sampling params are rejected,
+            # depth is set with effort (pinned high; the model defaults to medium); server-side
+            # fallbacks rescue a policy decline in-call.
             with c.beta.messages.stream(
                 model=ANTHROPIC_MODEL, max_tokens=32000, system=system,
                 messages=[{"role": "user", "content": user}],
