@@ -2,7 +2,7 @@
 """Create a web-safe, loudness-normalized delivery master and a new bound artifact.
 
 The creative render is an intermediate. This step preserves its exact picture frame count while
-converting the export to limited-range BT.709/yuv420p, applying measured two-pass EBU R128 audio
+copying compliant video or converting to limited-range BT.709/yuv420p, applying two-pass EBU R128 audio
 normalization, and publishing a finish manifest that retains the build's source provenance.
 """
 
@@ -127,11 +127,37 @@ def colorspace_filter(video_stream: dict[str, Any]) -> str:
             "all=bt709:range=tv:format=yuv420p")
 
 
+def can_copy_picture(video_stream: dict[str, Any]) -> bool:
+    """Only skip conversion when the observed bitstream already meets the delivery contract."""
+    return all(video_stream.get(key) == value for key, value in {
+        "codec_name": "h264", "pix_fmt": "yuv420p", "color_range": "tv",
+        "color_space": "bt709", "color_transfer": "bt709", "color_primaries": "bt709",
+    }.items())
+
+
 def default_sidecar(input_path: str, kind: str) -> str:
     stem = os.path.splitext(os.path.abspath(input_path))[0]
     preferred = f"{stem}.{kind}.json"
     legacy = os.path.join(os.path.dirname(stem), f"{kind}.json")
     return preferred if os.path.exists(preferred) or not os.path.exists(legacy) else legacy
+
+
+def preserve_parent_artifact(artifact_path: str, parent: dict[str, Any],
+                             source: str, output: str) -> str:
+    """Move provenance out of every manifest destination before publishing a delivery."""
+    output_base = os.path.splitext(output)[0]
+    destinations = {os.path.realpath(f"{output_base}.artifact.json"),
+                    os.path.realpath(os.path.join(os.path.dirname(output), "artifact.json"))}
+    if os.path.realpath(artifact_path) not in destinations:
+        return artifact_path
+    source_base = os.path.splitext(source)[0]
+    stable = f"{source_base}.artifact.json"
+    if os.path.realpath(stable) in destinations:
+        # Same-stem conversion (demo.mov → demo.mp4) must not make the finished artifact
+        # point to itself. Use a content-addressed snapshot of the parent manifest.
+        stable = f"{source_base}.source-{sha256_file(artifact_path)[:16]}.artifact.json"
+    write_json(stable, parent)
+    return stable
 
 
 def main() -> None:
@@ -146,6 +172,8 @@ def main() -> None:
     parser.add_argument("--true-peak", type=float, default=-1.5)
     parser.add_argument("--crf", type=int, default=18)
     parser.add_argument("--preset", default="slow")
+    parser.add_argument("--video-mode", choices=("auto", "encode", "copy"), default="auto",
+                        help="auto copies compliant H.264/BT.709 video; encode forces conversion; copy requires compliance")
     parser.add_argument("--audio-bitrate", default="192k")
     parser.add_argument("--no-loudnorm", action="store_true")
     args = parser.parse_args()
@@ -157,7 +185,7 @@ def main() -> None:
     output = os.path.abspath(args.out)
     if not os.path.isfile(source):
         raise SystemExit(f"input not found: {source}")
-    if source == output:
+    if source == output or (os.path.exists(output) and os.path.samefile(source, output)):
         raise SystemExit("--out must differ from --input; finishing is a separate provenance step")
     os.makedirs(os.path.dirname(output), exist_ok=True)
 
@@ -173,6 +201,10 @@ def main() -> None:
     if source_fps <= 0:
         raise SystemExit("could not determine input picture frame rate")
     picture_duration = source_frames / source_fps
+    eligible_for_copy = can_copy_picture(source_video)
+    if args.video_mode == "copy" and not eligible_for_copy:
+        raise SystemExit("--video-mode copy requires H.264/yuv420p with explicit limited-range BT.709 color metadata")
+    copy_picture = args.video_mode != "encode" and eligible_for_copy
 
     artifact_path = os.path.abspath(args.artifact or default_sidecar(source, "artifact"))
     parent = load_json(artifact_path) if os.path.exists(artifact_path) else None
@@ -183,20 +215,14 @@ def main() -> None:
             raise SystemExit(f"input artifact hash mismatch: {expected_hash or 'missing'} != {source_hash}")
     elif args.require_artifact:
         raise SystemExit(f"input artifact required but missing: {artifact_path}")
-    # A legacy generic artifact in the same directory would otherwise be overwritten by the
-    # finished artifact. Promote it to the input stem first so the parent link remains resolvable.
-    generic_output_artifact = os.path.join(os.path.dirname(output), "artifact.json")
-    if (parent and os.path.realpath(artifact_path) == os.path.realpath(generic_output_artifact)):
-        stable_parent = f"{os.path.splitext(source)[0]}.artifact.json"
-        write_json(stable_parent, parent)
-        artifact_path = stable_parent
     props_path = os.path.abspath(args.props or default_sidecar(source, "props"))
     props = load_json(props_path) if os.path.exists(props_path) else None
+    actual_props = (hashlib.sha256(json.dumps(
+        props, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if props is not None else None)
     if parent and parent.get("propsSha256"):
         if props is None:
             raise SystemExit(f"input props required by artifact but missing: {props_path}")
-        actual_props = hashlib.sha256(json.dumps(
-            props, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         if actual_props.lower() != str(parent["propsSha256"]).lower():
             raise SystemExit("input props hash does not match artifact")
 
@@ -204,7 +230,9 @@ def main() -> None:
         "targetLufs": None if args.no_loudnorm else args.target_lufs,
         "targetLra": None if args.no_loudnorm else args.target_lra,
         "truePeakDbtp": None if args.no_loudnorm else args.true_peak,
-        "videoCodec": "libx264", "crf": args.crf, "preset": args.preset,
+        "videoMode": "copy" if copy_picture else "encode",
+        "videoCodec": "copy" if copy_picture else "libx264",
+        "crf": None if copy_picture else args.crf, "preset": None if copy_picture else args.preset,
         "pixelFormat": "yuv420p", "color": "bt709-tv", "audioCodec": "aac",
         "audioBitrate": args.audio_bitrate, "sampleRate": 48000,
         "durationPolicy": "picture-frames",
@@ -232,13 +260,14 @@ def main() -> None:
                                        suffix=suffix, dir=os.path.dirname(output))
     os.close(fd)
     os.unlink(temp_output)  # FFmpeg expects to create the output itself.
+    picture_options = (["-c:v", "copy"] if copy_picture else [
+        "-vf", colorspace_filter(source_video), "-c:v", "libx264", "-crf", str(args.crf),
+        "-preset", args.preset, "-pix_fmt", "yuv420p", "-fps_mode", "passthrough",
+        "-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"])
     command = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", source,
-        "-map", "0:v:0", "-map", "0:a:0", "-vf", colorspace_filter(source_video),
-        "-af", audio_filter, "-c:v", "libx264", "-crf", str(args.crf),
-        "-preset", args.preset, "-pix_fmt", "yuv420p", "-fps_mode", "passthrough",
-        "-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709",
-        "-color_trc", "bt709", "-c:a", "aac", "-b:a", args.audio_bitrate, "-ar", "48000",
+        "-map", "0:v:0", "-map", "0:a:0", *picture_options,
+        "-af", audio_filter, "-c:a", "aac", "-b:a", args.audio_bitrate, "-ar", "48000",
         "-t", f"{picture_duration:.9f}", "-movflags", "+faststart", temp_output,
     ]
     try:
@@ -247,6 +276,10 @@ def main() -> None:
         finished_frames = frame_count(finished_probe)
         if finished_frames != source_frames:
             raise RuntimeError(f"finish changed picture frames: input={source_frames}, output={finished_frames}")
+        if not can_copy_picture(stream(finished_probe, "video")):
+            raise RuntimeError("finished video does not meet H.264/yuv420p/BT.709 limited-range delivery requirements")
+        if parent:
+            artifact_path = preserve_parent_artifact(artifact_path, parent, source, output)
         os.replace(temp_output, output)
     finally:
         if os.path.exists(temp_output):
@@ -254,13 +287,15 @@ def main() -> None:
 
     expected = dict((parent or {}).get("expected") or {})
     expected.update({"frames": source_frames,
+                     "durationSec": picture_duration,
                      "fps": float(expected.get("fps") or source_fps),
                      "width": int(source_video.get("width") or 0),
                      "height": int(source_video.get("height") or 0),
                      "videoCodec": "h264", "audioCodec": "aac",
                      "pixelFormat": "yuv420p", "colorSpace": "bt709",
                      "colorTransfer": "bt709", "colorPrimaries": "bt709",
-                     "colorRange": "tv", "sampleRate": 48000})
+                     "colorRange": "tv", "sampleRate": 48000,
+                     "channels": int(source_audio.get("channels") or 0)})
     finished_artifact = {
         "schemaVersion": 2,
         "artifactType": "finished-delivery",
@@ -268,7 +303,7 @@ def main() -> None:
         "finishId": finish_id,
         "project": (parent or {}).get("project"),
         "scriptSha256": (parent or {}).get("scriptSha256"),
-        "propsSha256": (parent or {}).get("propsSha256"),
+        "propsSha256": actual_props,
         "parentArtifact": ({"path": artifact_path, "sha256": sha256_file(artifact_path),
                             "outputSha256": source_hash} if parent else None),
         "finishConfig": finish_config,
@@ -288,6 +323,16 @@ def main() -> None:
         plan = load_json(source_plan)
         write_json(f"{output_base}.build-plan.json", plan)
         write_json(os.path.join(os.path.dirname(output), "build-plan.json"), plan)
+    source_direction = default_sidecar(source, "direction-plan")
+    if os.path.exists(source_direction):
+        direction = load_json(source_direction)
+        write_json(f"{output_base}.direction-plan.json", direction)
+    source_editorial = default_sidecar(source, "editorial-report")
+    if os.path.exists(source_editorial):
+        editorial = load_json(source_editorial)
+        if (parent and editorial.get("buildId") == parent.get("buildId")
+                and editorial.get("propsSha256") == actual_props):
+            write_json(f"{output_base}.editorial-report.json", editorial)
     stem_artifact = f"{output_base}.artifact.json"
     write_json(stem_artifact, finished_artifact)
     write_json(os.path.join(os.path.dirname(output), "artifact.json"), finished_artifact)

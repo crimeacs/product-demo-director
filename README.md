@@ -66,6 +66,10 @@ re-render it or copy its approach.
   captures only the states that matter, and controls attention with full-frame cuts and connected zooms.
 - **Speech controls picture.** Character-level timing from ElevenLabs gives every narrated thought its
   own visual runway, so cuts land between ideas instead of clipping them.
+- **Evidence has a timecode.** Declared source beats expose late proof and missing action lead-in;
+  explicit playback spans keep actions, compress navigation and hold real frames long enough to read.
+- **Compose complete UI objects.** Connected camera moves keep context; native detail plates show a
+  whole control or panel on a clean canvas, checked at 320px and 390px.
 - **Designed, not generated.** No AI footage and no stock slop: redrawn product moments, real type, real
   motion design, style frames approved before a single frame renders.
 - **The file that ships carries receipts.** Source and claim hashes, exact frames, a full decode,
@@ -116,9 +120,9 @@ Generated media stays out of Git: `projects/`, every `out/` folder and `artifact
         │
         ▼
    build.py  →  Remotion engine (Timeline.tsx)
-        │       full-frame shots · connected zooms · kinetic captions · SFX on real beats
+        │       studio typography · camera paths · masked transitions · source-anchored annotations
         ▼
-   out/demo.mp4 + build-plan.json + artifact.json
+   out/demo.mp4 + direction-plan.json + editorial-report.json + build-plan.json + artifact.json
         │
         ▼
    finish.py  optional two-pass -18 LUFS + BT.709 web-safe delivery master, frame-preserving
@@ -233,6 +237,65 @@ in-points) is in [`SKILL.md`](SKILL.md).
 - **Redact identifiers, never the value.**
 - **Be honest.** Only verified claims; show the real human/agent boundary; end once.
 
+For small-screen delivery, choose one complete reading goal per proof beat and measure its source
+rectangle. The optional `framing` declaration derives a camera path from those measurements and
+reports projected glyph height at the intended viewing width. Keep qualifiers, units, and replay
+labels with the evidence. Review the exported film using the review room's **320px** and **390px**
+controls; a geometric estimate cannot verify changing UI, compression, contrast, or comprehension.
+If the complete fact cannot fit legibly, choose a smaller complete fact or recapture larger UI.
+See [Measured small-screen framing](docs/SMALL_SCREEN_FRAMING.md) for the schema and capture guidance.
+
+## Repository layout
+
+| Path | What |
+|---|---|
+| `engine/` | Self-contained Remotion project — the props-driven motion engine (`src/Timeline.tsx`), themed per project via `brand.json`. |
+| `tools/onboard.py` | Auto-extract a brand (palette/font/logo/name) from the product's URL → `brand.json`. |
+| `tools/shoot.py` | The director records footage itself — autonomous web shoots + terminal/CLI sessions. |
+| `tools/term.py` | Render terminal sessions, recorded API focus pages, or source-bound, labelled text excerpts as footage. |
+| `tools/workbench.py` | Render a JSON-driven Claude/Codex production workbench with prompt, tools, previews, timeline, render, and QA states. |
+| `tools/review.py` | Generate an offline review room with playback, shot navigation, narration, and hash-checked delivery evidence. |
+| `tools/script.py` | Draft a Save-the-Cat, causal-workflow, before-after, or walkthrough `script.json` from the product, brand, and footage manifest. |
+| `tools/preflight.py` | Deterministic source/story/claim/audio/camera checks before render. |
+| `tools/vo.py` | ElevenLabs `eleven_v3` or Gemini TTS, as per-shot lines or one continuous generated narration master; supplied human masters are staged by `build.py`. |
+| `tools/pace.py` | Retimes picture boundaries to timestamp-aligned narration gaps without accelerating or truncating speech. |
+| `tools/music.py` | ElevenLabs Music or Lyria bed, sized to the narrated runtime. |
+| `tools/sfx.py` | Forge a bespoke SFX palette; a model listens and keeps the best of each. |
+| `tools/build.py` | Maps the contract and script to exact-frame Remotion props, render, build plan, and artifact manifest. |
+| `tools/framing.py` | Compiles measured source rectangles into camera holds and advisory small-screen text-size estimates. |
+| `tools/finish.py` | Frame-preserving, two-pass loudness and BT.709/yuv420p delivery master with inherited provenance. |
+| `tools/qa.py` | Binds and decodes the final artifact, measures delivery audio/black/silence, and generates proof sheets. |
+| `tools/judge.py` | Gemini video judge for subjective review after deterministic QA. |
+| `tools/compare.py` | Optional artifact-bound comparison in both display orders; the scored experiment requires a 2–0 sweep outside judge noise. |
+| `tools/capture.py` | Playwright recorder + page-probe used by `shoot.py`/`term.py`. |
+| `tools/motion.py`, `tools/motion_render.mjs` | The motion-graphics track: style frames, then frame-exact renders with motion blur. |
+| `docs/EDITING.md` | The edit methodology — every rule was a real mistake first. |
+| `docs/PRODUCTION_CONTRACT.md` | Profiles, narration locks, claims, continuity, artifact binding, and acceptance gates. |
+| `docs/CAPTURE.md` | Capturing footage cleanly: web (autonomous planning), terminal, redaction. |
+| `docs/MOTION_GRAPHICS.md` | The motion-graphics method: concept, style frames, a designed system, sound on every hit. |
+| `docs/SMALL_SCREEN_FRAMING.md` | Measured reading goals, source geometry, projected text size, and 320px/390px review. |
+| `examples/save-the-cat/` | The reproducible one-minute story of Codex turning raw footage and verified inputs into a directed, QA-proven demo. |
+| `examples/motion-pdd-self/` | This repository's own 30-second motion-graphics film, the worked example. |
+| `examples/calibration/` | Committed known-bad cut for `judge.py --probe` — run it before trusting any improve loop. |
+
+## Craft rules (the short version)
+
+- **Choose a real story grammar.** Use Save the Cat for dramatic transformation, causal workflow
+  for consequential proof, before/after for a sourced short promo, or walkthrough for chaptered use.
+- **Progress must appear live.** A finished answer visible before its initiating event reads as a preset.
+- **Authority is product behavior.** Low-friction work may be automatic; consequential decisions keep the accountable human boundary.
+- **Captions are optional; subtitles are exact.** Suppress duplicate text when it obscures the product.
+- **Use live takes for causality.** Stills can explain a sourced fact but cannot prove state change.
+- **No same-screen crop resets.** One screen/session gets one clip and connected camera regions.
+- **Protect people and cursors.** Preserve moving human framing and keep the pointer inside its safe margin.
+- **No meta-commentary on screen.** Strip anything that narrates how the cut was made.
+- **Pace by meaning.** Remove inert time, not the setup or decision hold that makes the story legible.
+- **One visual focus.** Sequence comparisons as full-frame evidence; never cut away in the middle of a spoken thought.
+- **Review at viewing size.** Inspect complete proof and its qualifiers at 320px and 390px; zoom estimates remain advisory.
+- **Show the work.** Include source evidence, an event/receipt, and one completed packet when claiming scale.
+- **Redact identifiers, never the value.** Hide client marks; keep the proof sharp.
+- **Be honest.** Only verified claims; show the real human/agent boundary; end once.
+
 For motion graphics: one idea per screen, hits snap and flows glide, hold then hit, confident colour,
 designed transitions, sound on every hit. Full reasoning in [`docs/EDITING.md`](docs/EDITING.md) and
 [`docs/MOTION_GRAPHICS.md`](docs/MOTION_GRAPHICS.md).
@@ -252,6 +315,17 @@ candidate in both orders, and ship only a 2–0 winner. A split or a roughly two
 three plausible cut-level candidates fail, stop grinding; the next gain needs new narration, product
 behavior or footage. Calibrate first with the known-bad cut in `examples/calibration/`.
 
+For sequence-level production review, use `--lens motion --fps 24`. It returns timestamped defects,
+viewer impact, production layers, and concrete corrections; a useful reading hold is distinct from
+padding. The receipt binds the exact media, submitted frame rate, models, and provider usage. Actual
+provider frame selection remains unverified. Scores are advisory. See the
+[motion review workflow](docs/PRODUCTION_CONTRACT.md#deterministic-checks-versus-ai-review).
+
+When using the optional scored experiment, pin the model, use the median of three, and compare
+champion and candidate in both orders. Require a 2–0 result for that experiment; treat a split or
+roughly two-point movement as noise. Scores do not measure audience engagement or replace direct
+review. If three plausible in-point/zoom/pacing candidates fail, revisit narration, product behavior,
+or capture instead of continuing to tune the same cut.
 </details>
 
 <details>

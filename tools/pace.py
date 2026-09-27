@@ -15,6 +15,8 @@ import os
 import tempfile
 from typing import Any
 
+from contracts import PROFILE_ALIASES, PROFILES
+
 
 class PaceError(ValueError):
     pass
@@ -49,27 +51,34 @@ def pace_script(script: dict[str, Any]) -> dict[str, Any]:
         raise PaceError("script needs a non-empty shots array")
     if not isinstance(cues, list) or not cues:
         raise PaceError("script needs a timestamp-aligned narrationMap")
-    fps = int(script.get("fps") or 30)
-    if fps <= 0:
-        raise PaceError("fps must be positive")
+    if any(not isinstance(shot, dict) for shot in shots):
+        raise PaceError("every shot must be an object")
+    fps_value = _number(script.get("fps", 30), -1.0)
+    if isinstance(script.get("fps"), bool) or fps_value <= 0 or not fps_value.is_integer():
+        raise PaceError("fps must be a positive integer")
+    fps = int(fps_value)
     production = script.get("production") if isinstance(script.get("production"), dict) else {}
+    profile = str(production.get("profile", ""))
+    production = {**PROFILES.get(PROFILE_ALIASES.get(profile, profile), {}), **production}
     editorial = script.get("editorialContract") if isinstance(script.get("editorialContract"), dict) else {}
     target = _number(editorial.get("targetRuntimeSec"), 0.0)
     if target <= 0:
         target = sum(max(0.0, _number(shot.get("durSec"), 0.0)) for shot in shots)
-    total_frames = round(target * fps)
-    if total_frames <= len(shots):
+    total_frames = math.floor(target * fps + 0.5)
+    if total_frames < len(shots):
         raise PaceError("target runtime is too short for the shot count")
 
     by_shot: dict[int, list[dict[str, Any]]] = {}
     shot_numbers = [shot.get("n") for shot in shots]
-    if any(not isinstance(number, int) for number in shot_numbers):
+    if any(type(number) is not int for number in shot_numbers):
         raise PaceError("every shot needs an integer n")
+    if len(set(shot_numbers)) != len(shot_numbers):
+        raise PaceError("shot numbers must be unique")
     for index, cue in enumerate(cues):
         if not isinstance(cue, dict):
             raise PaceError(f"narrationMap[{index}] must be an object")
         shot_n = cue.get("shotN")
-        if shot_n not in shot_numbers:
+        if type(shot_n) is not int or shot_n not in shot_numbers:
             raise PaceError(f"narrationMap[{index}] references unknown shotN {shot_n!r}")
         start = _number(cue.get("startSec"), -1.0)
         end = _number(cue.get("endSec"), -1.0)
@@ -82,46 +91,59 @@ def pace_script(script: dict[str, Any]) -> dict[str, Any]:
     if unmapped:
         raise PaceError("every non-visual shot needs a narration cue; missing "
                         + ", ".join(str(value) for value in unmapped))
-    if any(shot.get("visualOnly") for shot in shots):
-        raise PaceError("automatic pacing does not yet place visualOnly shots; map a thought to each shot")
-
-    ordered_cues = [cue for shot in shots for cue in by_shot[int(shot["n"])]]
+    ordered_cues = [cue for shot in shots for cue in by_shot.get(int(shot["n"]), [])]
     starts = [_number(cue.get("startSec"), -1.0) for cue in ordered_cues]
     if starts != sorted(starts):
         raise PaceError("narrationMap shot assignments must progress in spoken order")
+    if any(_number(left["endSec"]) > _number(right["startSec"]) + 1e-9
+           for left, right in zip(ordered_cues, ordered_cues[1:])):
+        raise PaceError("narrationMap cues must not overlap")
 
     authored_boundaries: list[int] = []
     cursor = 0
     for shot in shots[:-1]:
-        cursor += max(1, round(_number(shot.get("durSec"), 0.0) * fps))
+        cursor += max(1, math.floor(_number(shot.get("durSec"), 0.0) * fps + 0.5))
         authored_boundaries.append(cursor)
 
     padding = max(0.0, _number(production.get("narrationCutPaddingSec"), 0.04))
-    boundaries: list[int] = []
-    for index, (left_shot, right_shot) in enumerate(zip(shots, shots[1:])):
-        left = by_shot[int(left_shot["n"])]
-        right = by_shot[int(right_shot["n"])]
-        left_end = max(_number(cue.get("endSec"), -1.0) for cue in left)
-        right_start = min(_number(cue.get("startSec"), -1.0) for cue in right)
-        lower = math.ceil((left_end + padding) * fps - 1e-9)
-        upper = math.floor((right_start - padding) * fps + 1e-9)
-        if lower > upper:
-            # A frame-exact boundary at the shared sentence edge is still safe. This fallback is
-            # deliberately narrow; overlapping speech remains impossible to pace automatically.
+    # Each cut belongs to a gap between spoken shots. Visual-only shots share that gap,
+    # including leading establishing shots and an unvoiced closing card.
+    narrated = [index for index, shot in enumerate(shots) if shot["n"] in by_shot]
+    windows: list[tuple[int, int]] = []
+    for index in range(len(shots) - 1):
+        left_index = next((value for value in reversed(narrated) if value <= index), None)
+        right_index = next((value for value in narrated if value > index), None)
+        left_end = (max(_number(cue["endSec"]) for cue in by_shot[shots[left_index]["n"]])
+                    if left_index is not None else 0.0)
+        right_start = (min(_number(cue["startSec"]) for cue in by_shot[shots[right_index]["n"]])
+                       if right_index is not None else total_frames / fps)
+        first_edge = left_index + 1 if left_index is not None else 0
+        last_edge = right_index if right_index is not None else len(shots)
+        required_span = last_edge - first_edge
+        lower = math.ceil((left_end + (padding if left_index is not None else 0)) * fps - 1e-9)
+        upper = math.floor((right_start - (padding if right_index is not None else 0)) * fps + 1e-9)
+        if upper - lower < required_span:
+            # Preserve complete speech when the available gap cannot also carry padding.
             lower = math.ceil(left_end * fps - 1e-9)
             upper = math.floor(right_start * fps + 1e-9)
-        if lower > upper:
+        if upper - lower < required_span:
             raise PaceError(
-                f"no frame-safe cut exists between shot {left_shot['n']} ending at "
-                f"{left_end:.3f}s and shot {right_shot['n']} starting at {right_start:.3f}s"
+                f"no frame-safe cut exists around shot {shots[index]['n']}: "
+                f"the {left_end:.3f}–{right_start:.3f}s gap cannot fit the visual shots"
             )
-        desired = authored_boundaries[index]
-        chosen = min(upper, max(lower, desired))
-        if boundaries and chosen <= boundaries[-1]:
-            raise PaceError(f"shot {right_shot['n']} has no positive frame duration")
-        boundaries.append(chosen)
+        edge = index + 1
+        windows.append((max(edge, lower + edge - first_edge),
+                        min(total_frames - (len(shots) - edge), upper - (last_edge - edge))))
 
-    last_end = max(_number(cue.get("endSec"), -1.0) for cue in by_shot[int(shots[-1]["n"])])
+    boundaries: list[int] = []
+    for index, (lower, upper) in enumerate(windows):
+        if boundaries:
+            lower = max(lower, boundaries[-1] + 1)
+        if lower > upper:
+            raise PaceError(f"shot {shots[index]['n']} has no positive frame duration")
+        boundaries.append(min(upper, max(lower, authored_boundaries[index])))
+
+    last_end = max(_number(cue.get("endSec"), -1.0) for cue in ordered_cues)
     min_tail = max(0.0, _number(production.get("minNarrationTailSec"), 0.0))
     if last_end + min_tail > total_frames / fps + 1e-9:
         raise PaceError(
@@ -144,15 +166,31 @@ def pace_script(script: dict[str, Any]) -> dict[str, Any]:
             "endSec": frame_edges[index + 1] / fps,
             "durSec": frames / fps,
         })
+        if "sourceTimeline" in shot and frames != math.floor(_number(shot.get("durSec"), 0) * fps + 0.5):
+            raise PaceError(
+                f"shot {shot['n']} has an authored sourceTimeline and pacing would resize it; "
+                "pace narration before mapping the source, then author the map for the final shot duration"
+            )
     return {"fps": fps, "totalFrames": total_frames, "totalSec": total_frames / fps,
             "paddingSec": padding, "shots": rows}
 
 
 def apply_plan(script: dict[str, Any], plan: dict[str, Any]) -> None:
     durations = {row["n"]: row["durSec"] for row in plan["shots"]}
+    fps = plan["fps"]
+    # Check all mapped shots before mutating any shot; applying an older plan must
+    # not silently stretch a protected action or shorten a deliberate reading hold.
+    for shot in script["shots"]:
+        if "sourceTimeline" in shot and math.floor(_number(shot.get("durSec"), 0) * fps + 0.5) != math.floor(durations[int(shot["n"])] * fps + 0.5):
+            raise PaceError(
+                f"shot {shot['n']} has an authored sourceTimeline; pace narration before mapping "
+                "the source, then regenerate the map for the new shot duration"
+            )
     for shot in script["shots"]:
         shot["durSec"] = durations[int(shot["n"])]
-    editorial = script.setdefault("editorialContract", {})
+    if not isinstance(script.get("editorialContract"), dict):
+        script["editorialContract"] = {}
+    editorial = script["editorialContract"]
     editorial["targetRuntimeSec"] = plan["totalSec"]
     editorial["runtimeToleranceSec"] = 0
     editorial["narrationPaced"] = True

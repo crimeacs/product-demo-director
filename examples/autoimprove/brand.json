@@ -1,0 +1,10 @@
+{
+  "name": "auto-improve",
+  "tagline": "AI that gets better. Automatically.",
+  "url": "github.com/crimeacs/auto-improve",
+  "logo": null,
+  "font": "Inter",
+  "tone": "plain, specific, declarative; no hype",
+  "dark": true,
+  "cta": { "name": "auto-", "accent": "improve", "url": "github.com/crimeacs/auto-improve" }
+}
