@@ -8,7 +8,7 @@
 // across the shutter (180 degrees = 0.5) for true motion blur, then encodes H.264 1080p.
 // --stills renders only those timestamps as JPEGs next to --out (fast review before a full render).
 import http from 'http'; import fs from 'fs'; import path from 'path'; import { execFileSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, v, i, arr) => (v.startsWith('--') ? [...a, [v.slice(2), arr[i + 1]]] : a), []));
 const film = args.film, out = path.resolve(args.out || 'out/motion.mp4');
@@ -16,19 +16,21 @@ if (!film) { console.error('usage: --film <html> --out <mp4>'); process.exit(2);
 const FPS = +(args.fps || 60), SUB = +(args.sub || 4), SHUT = +(args.shutter || .5), DPR = +(args.dpr || 1), N = +(args.workers || 8);
 let chromium;
 for (const p of [process.env.PLAYWRIGHT_MODULE, path.join(ROOT, 'engine/node_modules/playwright/index.mjs'), 'playwright']) {
-  if (!p) continue; try { ({ chromium } = await import(p)); break; } catch { }
+  if (!p) continue; try { ({ chromium } = await import(path.isAbsolute(p) ? pathToFileURL(p).href : p)); break; } catch { }   // Windows: import() needs a file:// URL, not D:\...
 }
 if (!chromium) { console.error('playwright not found: npm i -D playwright in engine/ or set PLAYWRIGHT_MODULE'); process.exit(2); }
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.json': 'application/json' };
 // serve absolute paths, but only under the repository or the film's own folder (localhost, random port)
 const ALLOW = [ROOT, path.dirname(path.resolve(film))];
 const server = http.createServer((req, res) => {
-  const p = path.normalize(decodeURIComponent(req.url.split('?')[0]));
+  let u = decodeURIComponent(req.url.split('?')[0]);
+  if (process.platform === 'win32' && /^\/[A-Za-z]:\//.test(u)) u = u.slice(1);   // Windows: "/D:/x" -> "D:/x"
+  const p = path.normalize(u);
   if (!ALLOW.some(a => p === a || p.startsWith(a + path.sep)) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res);
 });
 await new Promise(r => server.listen(0, '127.0.0.1', r));
-const url = `http://127.0.0.1:${server.address().port}${path.resolve(film).split(path.sep).join('/')}${args.query ? '?' + args.query : ''}`;
+const url = `http://127.0.0.1:${server.address().port}${path.resolve(film).split(path.sep).join('/').replace(/^(?!\/)/, '/')}${args.query ? '?' + args.query : ''}`;
 let W = 1920, H = 1080;   // replaced by window.SIZE = [w, h] when the film declares it (e.g. 1080x1920 vertical)
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 async function page(q = '') {
