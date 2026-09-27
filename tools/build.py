@@ -16,9 +16,15 @@ caption defaults to that exact line (subtitles match the narration) and the shot
 duration is stretched to fit the spoken audio.
 """
 import argparse, hashlib, json, math, os, re, shutil, subprocess, sys, tempfile
+from direction import compile_direction
+from framing import TIME_EPSILON
+from sound_design import BUILTIN_SOUNDS, ensure_sound
+from source_timing import compile_source_timeline, validate_source_timing
+from editorial import audit_editorial
 
 from contracts import (
     media_duration,
+    media_dimensions,
     resolve_source_manifests,
     sha256_file,
     summarize,
@@ -35,10 +41,16 @@ STATIC_DEAD_AIR_SEC = 4.5
 
 def compile_frame_plan(segs, fps):
     """Normalize segment durations to one canonical integer-frame plan."""
+    if isinstance(fps, bool) or not isinstance(fps, (int, float)) or not math.isfinite(fps) or fps <= 0:
+        raise ValueError("fps must be a finite positive number")
     cursor = 0
     rows = []
     for seg in segs:
-        frames = max(1, round(float(seg["durSec"]) * fps))
+        duration = float(seg["durSec"])
+        if not math.isfinite(duration) or duration <= 0:
+            raise ValueError(f"shot {seg.get('n', '?')}: durSec must be a finite positive number")
+        # Python's round() uses ties-to-even; Remotion/JavaScript rounds positive ties up.
+        frames = max(1, math.floor(duration * fps + 0.5))
         seg["durFrames"] = frames
         seg["durSec"] = frames / fps
         rows.append({"n": seg.get("n"), "kind": seg["kind"],
@@ -49,9 +61,96 @@ def compile_frame_plan(segs, fps):
     return rows, cursor
 
 
-def load_json(path):
-    with open(path) as fh:
-        return json.load(fh)
+def engine_input_paths(engine):
+    """Bind every engine module, including helpers imported by the composition."""
+    paths = []
+    for directory, _, names in os.walk(os.path.join(engine, "src")):
+        paths.extend(os.path.join(directory, name) for name in names
+                     if name.endswith((".ts", ".tsx", ".js", ".jsx", ".json", ".css")))
+    paths.append(os.path.join(engine, "package-lock.json"))
+    config = os.path.join(engine, "remotion.config.ts")
+    if os.path.isfile(config):
+        paths.append(config)
+    return sorted(paths)
+
+
+def stage_file(source, destination, expected_sha=None):
+    """Reuse identical staged bytes and atomically replace files without disrupting a render."""
+    expected_sha = expected_sha or sha256_file(source)
+    if (os.path.isfile(destination) and os.path.getsize(source) == os.path.getsize(destination)
+            and sha256_file(destination) == expected_sha):
+        return False
+    directory = os.path.dirname(os.path.abspath(destination))
+    os.makedirs(directory, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".staging-", dir=directory)
+    os.close(fd)
+    try:
+        shutil.copyfile(source, temporary)
+        if sha256_file(temporary) != expected_sha:
+            raise ValueError(f"input changed while staging: {source}; retry the build")
+        os.replace(temporary, destination)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return True
+
+
+def logo_source_path(project, logo):
+    """Accept an absolute logo or a nested assets-relative path without flattening it."""
+    if os.path.isabs(logo):
+        return logo
+    normalized = logo.replace("\\", "/")
+    if normalized.startswith("assets/"):
+        normalized = normalized[len("assets/"):]
+    asset_path = os.path.join(project, "assets", normalized)
+    # Onboarding and hand-authored projects can keep a simple logo beside brand.json.
+    # Explicit assets/ paths remain assets-relative; otherwise prefer the established
+    # assets location, then an existing project-relative file.
+    project_path = os.path.join(project, normalized)
+    if not logo.replace("\\", "/").startswith("assets/") and not os.path.isfile(asset_path) and os.path.isfile(project_path):
+        return project_path
+    return asset_path
+
+
+def snapshot_inputs(records, build_root, staged_paths):
+    """Retain the exact authored inputs for a reproducible edit after the project changes."""
+    snapshot_root = os.path.join(build_root, "inputs")
+    for index, record in enumerate(records):
+        source = record["path"]
+        destination = staged_paths.get(source)
+        if destination is None:
+            name = re.sub(r"[^a-zA-Z0-9._-]", "_", os.path.basename(record["name"]))
+            destination = os.path.join(snapshot_root, f"{index:03d}-{record['kind']}-{name}")
+            stage_file(source, destination, record["sha256"])
+        record["snapshotPath"] = os.path.abspath(destination)
+
+
+def verify_bound_code_inputs(records, temporary_output=None):
+    """Reject a live engine/builder edit instead of publishing under stale hashes."""
+    changed = []
+    for record in records:
+        if record.get("kind") not in {"engine", "builder"}:
+            continue
+        try:
+            matches = sha256_file(record["path"]) == record["sha256"]
+        except OSError:
+            matches = False
+        if not matches:
+            changed.append(record.get("name", record["path"]))
+    if changed:
+        if temporary_output and os.path.isfile(temporary_output):
+            os.unlink(temporary_output)
+        raise ValueError("bound render code changed: " + ", ".join(changed)
+                         + "; wait for code edits to finish, then retry the build. Previous delivery was not replaced.")
+
+
+def load_json(path, read_hashes=None):
+    """Hash the bytes actually parsed, so concurrent edits cannot bind different JSON."""
+    with open(path, "rb") as fh:
+        payload = fh.read()
+    if read_hashes is not None:
+        read_hashes[os.path.abspath(path)] = hashlib.sha256(payload).hexdigest()
+    return json.loads(payload)
 
 
 def write_json(path, value):
@@ -138,6 +237,8 @@ def bind_claim_evidence_inputs(script, project, bind_input):
                 raise ValueError(f"{field} does not exist: {name}")
             if not os.path.isfile(absolute):
                 raise ValueError(f"{field} is not a file: {name}")
+            if os.path.getsize(absolute) == 0:
+                raise ValueError(f"{field} is empty: {name}; provide the actual evidence before building")
 
             dedupe_key = os.path.normcase(real)
             if dedupe_key in seen_real_paths:
@@ -254,8 +355,16 @@ def main():
     engine = os.path.abspath(args.engine)
     pub = os.path.join(engine, "public")
     script_path = os.path.join(proj, "script.json")
-    script = load_json(script_path)
+    read_hashes = {}
+    script = load_json(script_path, read_hashes)
     fps = args.fps or script.get("fps", 30)
+    try:
+        compile_frame_plan([], fps)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    # Every preflight and compiler must see the actual render clock, including
+    # source spans that gain or lose frames under an explicit --fps override.
+    script = {**script, "fps": fps}
 
     if args.contracts != "off":
         findings = validate_script(script, proj, args.profile or None)
@@ -275,13 +384,13 @@ def main():
     # Brand: <project>/brand.json is the source of truth (palette/font/logo flow into the engine
     # theme + the CTA wordmark); falls back to the script's inline `brand` block.
     brand_path = os.path.join(proj, "brand.json")
-    brand = load_json(brand_path) if os.path.exists(brand_path) else script.get("brand", {})
+    brand = load_json(brand_path, read_hashes) if os.path.exists(brand_path) else script.get("brand", {})
     raw_theme = brand.get("theme") or script.get("theme") or {}
 
     vo = {}
     man = os.path.join(proj, "audio", "manifest.json")
     if os.path.exists(man):
-        for m in load_json(man):
+        for m in load_json(man, read_hashes):
             vo[m["n"]] = m
 
     # Bind the render to the exact script + referenced assets. Each build gets an isolated
@@ -301,6 +410,8 @@ def main():
             return None
         record = {"kind": kind, "name": str(name), "path": absolute,
                   "sha256": sha256_file(absolute), "bytes": os.path.getsize(absolute)}
+        if absolute in read_hashes and record["sha256"] != read_hashes[absolute]:
+            sys.exit(f"input changed after it was read: {absolute}; retry the build")
         input_records.append(record)
         return record
 
@@ -346,15 +457,27 @@ def main():
         bind_input("music", "music.mp3", music_source)
     logo = raw_theme.get("logo") or (brand.get("logo") if isinstance(brand, dict) else None)
     if logo:
-        logo_source = logo if os.path.isabs(logo) else os.path.join(proj, "assets", os.path.basename(logo))
+        logo_source = logo_source_path(proj, logo)
         bind_input("brand-logo", str(logo), logo_source)
-    for code_path in (os.path.join(engine, "src", "Timeline.tsx"),
-                      os.path.join(engine, "src", "Root.tsx"),
-                      os.path.join(engine, "package-lock.json")):
+    bind_input("builder", "tools/build.py", os.path.abspath(__file__))
+    for dependency in ("direction.py", "framing.py", "sound_design.py", "source_timing.py", "editorial.py", "contracts.py"):
+        bind_input("builder", f"tools/{dependency}", os.path.join(HERE, dependency))
+    for code_path in engine_input_paths(engine):
         bind_input("engine", os.path.relpath(code_path, engine), code_path)
     sfxdir = os.path.join(pub, "sfx")
-    for accent in sorted({str(sh["accent"]) for sh in script["shots"] if sh.get("accent")}):
-        bind_input("sfx", f"sfx/{accent}.mp3", os.path.join(sfxdir, f"{accent}.mp3"))
+    try:
+        initial_direction = compile_direction({**script, "fps": fps})
+    except ValueError as exc:
+        sys.exit(f"invalid creative direction: {exc}")
+    silent_studio = initial_direction["style"] == "studio" and initial_direction["soundDesign"] == "silent"
+    sounds = set() if silent_studio else {str(sh["accent"]) for sh in script["shots"] if sh.get("accent")}
+    sounds.update(cue["sound"] for shot in initial_direction["shots"] for cue in shot["soundCues"])
+    sound_sources = {}
+    for sound in sorted(sounds):
+        source = (ensure_sound(sound, os.path.join(proj, "out", "sound-library"))
+                  if sound in BUILTIN_SOUNDS else os.path.join(sfxdir, f"{sound}.mp3"))
+        sound_sources[sound] = source
+        bind_input("sfx", f"sfx/{os.path.basename(source)}", source)
 
     production_hint = script.get("production") if isinstance(script.get("production"), dict) else {}
     build_config = {"fps": fps, "profile": args.profile or production_hint.get("profile"),
@@ -367,29 +490,35 @@ def main():
     stage_audio = os.path.join(stage_root, "audio")
     os.makedirs(stage_assets, exist_ok=True)
     os.makedirs(stage_audio, exist_ok=True)
+    input_hashes = {record["path"]: record["sha256"] for record in input_records}
+    staged_paths = {}
+
+    def stage(source, destination):
+        try:
+            stage_file(source, destination, input_hashes.get(os.path.abspath(source)))
+            staged_paths[os.path.abspath(source)] = os.path.abspath(destination)
+        except ValueError as exc:
+            sys.exit(str(exc))
+
     for record in source_records:
         dst = os.path.join(stage_assets, record["name"])
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copy(record["path"], dst)
+        stage(record["path"], dst)
     for entry in vo.values():
         name = entry["file"]
         src = os.path.join(proj, "audio", name)
         if os.path.exists(src):
             dst = os.path.join(stage_audio, name)
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.copy(src, dst)
-    referenced_accents = sorted({str(sh["accent"]) for sh in script["shots"] if sh.get("accent")})
-    if referenced_accents:
+            stage(src, dst)
+    if sound_sources:
         os.makedirs(os.path.join(stage_root, "sfx"), exist_ok=True)
-        for accent in referenced_accents:
-            shutil.copy(os.path.join(sfxdir, f"{accent}.mp3"),
-                        os.path.join(stage_root, "sfx", f"{accent}.mp3"))
+        for source in sound_sources.values():
+            stage(source, os.path.join(stage_root, "sfx", os.path.basename(source)))
 
     narration_props = None
     if narration and narration.get("mix", True):
         ext = os.path.splitext(narration_source)[1] or ".wav"
         staged_name = f"master{ext.lower()}"
-        shutil.copy(narration_source, os.path.join(stage_audio, staged_name))
+        stage(narration_source, os.path.join(stage_audio, staged_name))
         probed_narration_sec = media_duration(narration_source)
         narration_props = {
             "src": f"audio/{staged_name}",
@@ -403,9 +532,9 @@ def main():
     if os.path.exists(music_source):
         stage_music = os.path.join(stage_root, "music")
         os.makedirs(stage_music, exist_ok=True)
-        shutil.copy(music_source, os.path.join(stage_music, "bed.mp3"))
+        stage(music_source, os.path.join(stage_music, "bed.mp3"))
         music = "music/bed.mp3"
-    sfx = {accent: f"sfx/{accent}.mp3" for accent in referenced_accents}
+    sfx = {sound: f"sfx/{os.path.basename(source)}" for sound, source in sound_sources.items()}
 
     def asset(p):
         return f"assets/{p}" if p else p
@@ -449,10 +578,10 @@ def main():
             out["font"] = font
         logo = raw_theme.get("logo") or (brand.get("logo") if isinstance(brand, dict) else None)
         if logo:
-            lp = logo if os.path.isabs(logo) else os.path.join(proj, "assets", os.path.basename(logo))
+            lp = logo_source_path(proj, logo)
             if os.path.exists(lp):
-                shutil.copy(lp, os.path.join(stage_assets, os.path.basename(lp)))
-                out["logo"] = f"assets/{os.path.basename(lp)}"
+                stage(lp, os.path.join(stage_root, "brand", os.path.basename(lp)))
+                out["logo"] = f"brand/{os.path.basename(lp)}"
         return out
 
     theme = build_theme()
@@ -466,6 +595,7 @@ def main():
             locked_sources.add(lock["src"])
 
     segs = []
+    source_dimensions = {}
     for sh in script["shots"]:
         n = sh["n"]
         kind = sh.get("kind", "clip")
@@ -490,9 +620,9 @@ def main():
             "captionStyle": sh.get("captionStyle", "label"),
             "chapter": sh.get("chapter", ""),
         }
-        for k in ("storyBeat", "storyBeats", "continuityId", "stateId", "transitionReason", "sourceType",
-                  "liveState", "actor", "actionRisk", "claimIds", "preserveFraming",
-                  "editorialIntent"):
+        for k in ("storyBeat", "storyBeats", "continuityId", "stateId", "transitionReason", "presentationCut", "sourceType",
+                  "liveState", "visualTreatment", "replayProvenance", "actor", "actionRisk", "claimIds", "preserveFraming",
+                  "editorialIntent", "titleLines", "emphasis", "annotations", "sourceBeats", "sourceWindow", "evidenceExcerpt"):
             if k in sh:
                 seg[k] = sh[k]
         preserve_framing = bool(sh.get("preserveFraming") or sh.get("src") in locked_sources)
@@ -505,17 +635,34 @@ def main():
             seg["showChapter"] = True
         if sh.get("flash"):
             seg["flash"] = True
-        if sh.get("transition") in ("cut", "xfade"):
+        if sh.get("transition") in ("cut", "xfade", "reveal", "push"):
             seg["transition"] = sh["transition"]
         if sh.get("accent"):                 # per-beat sound (sfx key, e.g. "success_chime")
             seg["accent"] = sh["accent"]
         if "accentAtSec" in sh:              # optional: land the sfx on the actual UI event, not segment start
             seg["accentAtSec"] = sh["accentAtSec"]
-        for k in ("captionTop", "captionBottom"):
+        for k in ("captionTop", "captionBottom", "captionFontSize"):
             if k in sh:
                 seg[k] = sh[k]
         if kind == "clip":
             seg.update(src=asset(sh["src"]), inSec=sh.get("inSec", 0), scale=sh.get("scale", 1.0))
+            # Detail compositions keep editorial copy outside the native source
+            # plate; this text is never painted into the product itself.
+            for key in ("title", "eyebrow"):
+                if key in sh:
+                    seg[key] = sh[key]
+            if sh["src"] not in source_dimensions:
+                source_dimensions[sh["src"]] = media_dimensions(os.path.join(adir, sh["src"]))
+            dimensions = source_dimensions[sh["src"]]
+            if sh.get("framing"):
+                declared = sh["framing"]
+                if not dimensions or any(abs(float(declared[key]) - actual) > 0.5
+                                         for key, actual in zip(("sourceWidth", "sourceHeight"), dimensions)):
+                    sys.exit(f"framing source dimensions do not match the probed display geometry: {sh['src']}")
+            if dimensions:
+                seg.update(sourceWidth=dimensions[0], sourceHeight=dimensions[1])
+            elif sh.get("camera") or sh.get("annotations") or sh.get("sourceWindow") or sh.get("direction", {}).get("focus"):
+                sys.exit(f"cannot direct source-space geometry without readable video dimensions: {sh['src']}")
             for k in ("startScale", "endScale", "focusX", "focusY", "panX", "panY", "objectFit", "vignette"):
                 if k in sh:
                     seg[k] = sh[k]
@@ -524,7 +671,7 @@ def main():
             # zoom REGIONS (Screen-Studio style). Explicit `zooms` wins; else a legacy
             # clickX/clickY/clickAtSec shot derives one region around the click.
             zooms = sh.get("zooms")
-            if not zooms and sh.get("clickAtSec") is not None:
+            if not zooms and not sh.get("camera") and sh.get("clickAtSec") is not None:
                 zooms = [{
                     "atSec": max(0.0, float(sh["clickAtSec"]) - 0.9),
                     "durSec": 2.4, "scale": 1.55,
@@ -608,13 +755,72 @@ def main():
 
     # Integer frames are the canonical timeline. Root.tsx and Timeline.tsx consume the same
     # per-segment plan, eliminating the 1–2 frame drift caused by rounding total seconds twice.
-    plan_segments, total_frames = compile_frame_plan(segs, fps)
+    try:
+        plan_segments, total_frames = compile_frame_plan(segs, fps)
+    except ValueError as exc:
+        sys.exit(str(exc))
     total = total_frames / fps
+    frame_effective = json.loads(json.dumps(script))
+    frame_effective["fps"] = fps
+    for shot, seg in zip(frame_effective["shots"], segs):
+        framing = shot.get("framing") or {}
+        beats = framing.get("beats") or []
+        # The original full-shot detail declaration passed the direction
+        # preflight. Preserve its whole-shot meaning when the canonical frame
+        # clock rounds the duration, without changing the authored script.
+        if (framing.get("presentation") == "detail" and len(beats) == 1
+                and beats[0].get("atSec") == 0
+                and abs(beats[0].get("endSec", -1) - shot.get("durSec", 2.5)) <= TIME_EPSILON):
+            beats[0]["endSec"] = seg["durSec"]
+        shot["durSec"] = seg["durSec"]
+    timing_errors = validate_source_timing(frame_effective)
+    if timing_errors:
+        sys.exit("invalid effective source timing: " + "; ".join(
+            f"{item['code']} shot {item.get('shot', '?')}: {item['message']}" for item in timing_errors))
+    try:
+        direction_plan = compile_direction(frame_effective)
+    except ValueError as exc:
+        sys.exit(f"invalid effective creative direction: {exc}")
+    for shot, seg, directed in zip(frame_effective["shots"], segs, direction_plan["shots"]):
+        source_plan = compile_source_timeline(shot, fps)
+        if source_plan:
+            seg["sourcePlan"] = source_plan
+            directed["sourcePlan"] = source_plan
+        for key in ("studio", "direction", "camera", "transition", "transitionSec", "soundCues"):
+            seg[key] = directed[key]
+        if directed.get("sourceDetail"):
+            seg["sourceDetail"] = directed["sourceDetail"]
+        # Validate generated camera paths against the same cursor/source contracts as authored paths.
+        if directed["camera"]:
+            shot["camera"] = directed["camera"]
+        if directed["studio"] and direction_plan["soundDesign"] == "silent":
+            seg.pop("accent", None)
+        for finding in directed.get("framingReport", {}).get("findings", []):
+            print(f"  FRAMING advisory shot {shot['n']}: {finding['code']} — {finding['message']}")
+    editorial_report = audit_editorial(frame_effective)
+    editorial_authored = ("editorial" in production
+                          or any("sourceBeats" in shot for shot in frame_effective["shots"]))
+    if editorial_authored and editorial_report["status"] == "invalid":
+        sys.exit("invalid editorial declarations: " + "; ".join(
+            f"{item['code']}: {item['message']}" for item in editorial_report["findings"]
+            if item["severity"] == "error"))
+    for item in editorial_report["findings"]:
+        if item["severity"] == "warning":
+            print(f"  EDITORIAL advisory: {item['code']} — {item['message']}")
     if args.contracts != "off":
-        frame_effective = json.loads(json.dumps(script))
-        for shot, seg in zip(frame_effective["shots"], segs):
-            shot["durSec"] = seg["durSec"]
-        frame_findings = validate_script(frame_effective, proj, args.profile or None)
+        # Authored framing and explicit camera paths are mutually exclusive. The
+        # compiler has already validated their intent; cursor/source contracts
+        # now inspect the generated path in a separate effective script.
+        frame_validation = json.loads(json.dumps(frame_effective))
+        generated_framing = any(shot.get("framing") for shot in frame_validation["shots"])
+        if generated_framing:
+            frame_validation.setdefault("production", {}).setdefault("maxZoomScale", 8)
+            for shot in frame_validation["shots"]:
+                # Detail plates have no generated camera. Keep their authored
+                # rectangle so frame-normalized cursor checks inspect the mask.
+                if shot.get("framing", {}).get("presentation") != "detail":
+                    shot.pop("framing", None)
+        frame_findings = validate_script(frame_validation, proj, args.profile or None)
         frame_report = summarize(frame_findings)
         for finding in frame_findings:
             where = f" shot {finding.shot}" if finding.shot is not None else ""
@@ -638,14 +844,18 @@ def main():
              "musicFadeOutSec": script.get("musicFadeOutSec", 1.5),
              "sfx": sfx, "theme": theme, "segments": segs}
     props_sha = hashlib.sha256(json.dumps(props, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    try:
+        snapshot_inputs(input_records, os.path.dirname(stage_root), staged_paths)
+    except ValueError as exc:
+        sys.exit(str(exc))
     plan = {
         "schemaVersion": 2,
         "buildId": build_id,
         "project": proj,
         "profile": props.get("profile"),
-        "script": {"path": script_path, "sha256": sha256_file(script_path)},
-        "brand": ({"path": brand_path, "sha256": sha256_file(brand_path)}
-                  if os.path.exists(brand_path) else None),
+        "script": {"path": script_path, "sha256": input_hashes[script_path]},
+        "brand": ({"path": brand_path, "sha256": input_hashes[brand_path]}
+                  if brand_path in input_hashes else None),
         "assets": source_records,
         "inputs": input_records,
         "buildConfig": build_config,
@@ -660,6 +870,12 @@ def main():
     os.makedirs(project_out, exist_ok=True)
     write_json(os.path.join(project_out, "props.json"), props)
     write_json(os.path.join(project_out, "build-plan.json"), plan)
+    direction_plan.update(buildId=build_id, propsSha256=props_sha, totalFrames=total_frames,
+                          status="compiled", fps=fps)
+    write_json(os.path.join(project_out, "direction-plan.json"), direction_plan)
+    editorial_report.update(buildId=build_id, propsSha256=props_sha,
+                            script={"path": script_path, "sha256": plan["script"]["sha256"]})
+    write_json(os.path.join(project_out, "editorial-report.json"), editorial_report)
     print(f"{len(segs)} segments, {total:.3f}s / {total_frames} frames, build={build_id}, music={'yes' if music else 'none'}")
 
     if args.dry:
@@ -669,24 +885,24 @@ def main():
     out = args.out or os.path.join(proj, "out", "demo.mp4")
     out = os.path.abspath(out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    # Keep the plan and props beside the render so every downstream judge/QA can bind to the
-    # exact artifact instead of accidentally reviewing a similarly named old file.
+    # Render with build-scoped props. Publish delivery sidecars only after a successful
+    # render, preserving the previous video's receipts if this attempt aborts.
     stem, ext = os.path.splitext(os.path.basename(out))
     stem_base = os.path.join(os.path.dirname(out), stem)
-    render_props = f"{stem_base}.props.json"
+    render_props = os.path.join(os.path.dirname(stage_root), "render.props.json")
     write_json(render_props, props)
-    write_json(os.path.join(os.path.dirname(out), "props.json"), props)  # legacy/default-output convenience
-    write_json(f"{stem_base}.build-plan.json", plan)
-    write_json(os.path.join(os.path.dirname(out), "build-plan.json"), plan)
     render_tmp = os.path.join(os.path.dirname(out), f".{stem}.{build_id}.rendering{ext or '.mp4'}")
     if os.path.exists(render_tmp):
         os.unlink(render_tmp)
-    # The renderer consumes this build's immutable output-adjacent props rather than the shared
-    # Studio convenience file in engine/public. Concurrent projects cannot swap timelines.
+    # The renderer consumes this build's props rather than a shared convenience file.
     cmd = ["npx", "remotion", "render", "Timeline", render_tmp,
            f"--props={render_props}", f"--public-dir={stage_root}",
            "--concurrency=2", "--log=error"]
     print("rendering ->", out)
+    try:
+        verify_bound_code_inputs(input_records, render_tmp)
+    except ValueError as exc:
+        sys.exit(str(exc))
     r = subprocess.run(cmd, cwd=engine)
     print("render exit:", r.returncode)
     if r.returncode != 0:
@@ -714,7 +930,17 @@ def main():
         os.unlink(render_tmp)
         sys.exit(f"render container duration is implausible: expected about {total:.3f}s, "
                  f"observed {observed_duration:.3f}s")
+    try:
+        verify_bound_code_inputs(input_records, render_tmp)
+    except ValueError as exc:
+        sys.exit(str(exc))
     os.replace(render_tmp, out)
+    write_json(f"{stem_base}.props.json", props)
+    write_json(f"{stem_base}.direction-plan.json", direction_plan)
+    write_json(f"{stem_base}.editorial-report.json", editorial_report)
+    write_json(f"{stem_base}.build-plan.json", plan)
+    write_json(os.path.join(os.path.dirname(out), "props.json"), props)
+    write_json(os.path.join(os.path.dirname(out), "build-plan.json"), plan)
     artifact = {
         "schemaVersion": 2,
         "buildId": build_id,

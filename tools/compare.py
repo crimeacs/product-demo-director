@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import shutil
@@ -102,6 +103,15 @@ def ask(first_label: str, first: list[tuple[float, str]], second_label: str,
 
 def gate_decision(winners: list[str], champion_score: float | None = None,
                   candidate_score: float | None = None, noise_floor: float = 2.0) -> tuple[str, str]:
+    if len(winners) != 2 or any(winner not in {"candidate", "champion"} for winner in winners):
+        raise ValueError("two valid order-reversed votes are required")
+    if not math.isfinite(noise_floor) or noise_floor < 0:
+        raise ValueError("noise floor must be a finite non-negative number")
+    if (champion_score is None) != (candidate_score is None):
+        raise ValueError("champion and candidate scores must be supplied together")
+    for score in (champion_score, candidate_score):
+        if score is not None and (not math.isfinite(score) or not 0 <= score <= 100):
+            raise ValueError("scores must be finite numbers between 0 and 100")
     if winners == ["candidate", "candidate"]:
         if champion_score is not None and candidate_score is not None:
             delta = candidate_score - champion_score
@@ -115,7 +125,8 @@ def gate_decision(winners: list[str], champion_score: float | None = None,
 
 def require_qa(path: str) -> dict[str, Any]:
     report = load_json(path)
-    if report.get("status") != "pass":
+    if (report.get("status") != "pass" or report.get("fullDecode") != "pass"
+            or any(issue.get("severity") == "error" for issue in report.get("issues", []))):
         raise RuntimeError(f"candidate deterministic QA did not pass: {path}")
     return report
 
@@ -135,6 +146,12 @@ def main() -> None:
     parser.add_argument("--noise-floor", type=float, default=2.0)
     parser.add_argument("--out", default="")
     args = parser.parse_args()
+    # Reject incomplete/non-finite gates before spending time on media extraction or model calls.
+    try:
+        gate_decision(["candidate", "candidate"], args.champion_score,
+                      args.candidate_score, args.noise_floor)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     for binary in ("ffmpeg", "ffprobe", "claude"):
         if not shutil.which(binary):
@@ -157,14 +174,18 @@ def main() -> None:
 
     count = max(8, min(80, args.frames))
     with tempfile.TemporaryDirectory(prefix="pdd-pairwise-") as temp:
-        champ_frames = extract(champion, count, temp, "champion")
-        cand_frames = extract(candidate, count, temp, "candidate")
-        first = ask("champion", champ_frames, "candidate", cand_frames, rubric)
-        second = ask("candidate", cand_frames, "champion", champ_frames, rubric)
+        champ_frames = extract(champion, count, temp, "cut-1")
+        cand_frames = extract(candidate, count, temp, "cut-2")
+        # Keep revision status out of the prompt and filenames to avoid preference for a
+        # "candidate" or an incumbent "champion" independently of the visible evidence.
+        first = ask("A", champ_frames, "B", cand_frames, rubric)
+        second = ask("A", cand_frames, "B", champ_frames, rubric)
+        first["winner"] = {"A": "champion", "B": "candidate"}[first["winner"]]
+        second["winner"] = {"A": "candidate", "B": "champion"}[second["winner"]]
 
     winners = [first["winner"], second["winner"]]
     decision, reason = gate_decision(winners, args.champion_score, args.candidate_score,
-                                     max(0.0, args.noise_floor))
+                                     args.noise_floor)
     result = {
         "schemaVersion": 1,
         "decision": decision,
@@ -180,7 +201,7 @@ def main() -> None:
                       "buildId": candidate_artifact.get("buildId"),
                       "sha256": candidate_artifact["sha256"]},
         "candidateQa": os.path.abspath(args.candidate_qa),
-        "noiseFloor": max(0.0, args.noise_floor),
+        "noiseFloor": args.noise_floor,
     }
     output = json.dumps(result, indent=2)
     print(output)

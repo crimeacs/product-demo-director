@@ -1,0 +1,176 @@
+{
+  "fps": 30,
+  "creativeDirection": {
+    "style": "studio",
+    "tone": "editorial",
+    "soundDesign": "sparse"
+  },
+  "musicVolume": 0.32,
+  "musicFadeOutSec": 1.25,
+  "production": {
+    "hardMaxSec": 30,
+    "maxZoomScale": 1.9,
+    "sourceManifests": [
+      "_src/codex-workbench.json"
+    ],
+    "qa": {
+      "targetLufs": -18,
+      "lufsTolerance": 1,
+      "maxTruePeakDbtp": -1.5,
+      "blackMinSec": 0.2
+    }
+  },
+  "shots": [
+    {
+      "n": 1,
+      "kind": "title",
+      "durSec": 2.8,
+      "eyebrow": "PRODUCT DEMO DIRECTOR",
+      "title": "Every click. A reason to care.",
+      "titleLines": [
+        "Every click.",
+        "A reason to care."
+      ],
+      "emphasis": "reason",
+      "subtitle": "A study in product motion.",
+      "transition": "cut"
+    },
+    {
+      "n": 2,
+      "kind": "clip",
+      "src": "codex-workbench.webm",
+      "inSec": 2,
+      "durSec": 5.8,
+      "sourceType": "generated",
+      "liveState": false,
+      "caption": "CURATED WORKBENCH REPLAY",
+      "direction": {
+        "intent": "establish",
+        "layout": "stage",
+        "energy": 0.5
+      },
+      "transition": "reveal",
+      "transitionSec": 0.6
+    },
+    {
+      "n": 3,
+      "kind": "stat",
+      "durSec": 1.8,
+      "title": "Direct the eye.",
+      "emphasis": "eye.",
+      "eyebrow": "01 / ATTENTION",
+      "transition": "cut"
+    },
+    {
+      "n": 4,
+      "kind": "clip",
+      "src": "codex-workbench.webm",
+      "inSec": 18.2,
+      "durSec": 6,
+      "sourceType": "generated",
+      "liveState": false,
+      "caption": "CURATED WORKBENCH REPLAY",
+      "direction": {
+        "intent": "focus",
+        "layout": "fullbleed",
+        "energy": 0.45
+      },
+      "transition": "push",
+      "transitionSec": 0.5,
+      "camera": [
+        {
+          "atSec": 0,
+          "scale": 1,
+          "focusX": 50,
+          "focusY": 50
+        },
+        {
+          "atSec": 0.65,
+          "scale": 1,
+          "focusX": 50,
+          "focusY": 50
+        },
+        {
+          "atSec": 2,
+          "scale": 1.6,
+          "focusX": 71,
+          "focusY": 70,
+          "ease": "smooth"
+        },
+        {
+          "atSec": 5.8,
+          "scale": 1.6,
+          "focusX": 71,
+          "focusY": 70
+        }
+      ],
+      "annotations": [
+        {
+          "atSec": 2.4,
+          "endSec": 5.4,
+          "x": 49,
+          "y": 76.4,
+          "width": 46.7,
+          "height": 8.8,
+          "label": "Picture follows the spoken thought.",
+          "kind": "box"
+        }
+      ],
+      "soundCues": [
+        {
+          "atSec": 0,
+          "sound": "studio_air",
+          "volume": 0.24
+        },
+        {
+          "atSec": 2.4,
+          "sound": "studio_tick",
+          "volume": 0.22
+        }
+      ]
+    },
+    {
+      "n": 5,
+      "kind": "stat",
+      "durSec": 1.8,
+      "title": "Let the result land.",
+      "titleLines": [
+        "Let the result land."
+      ],
+      "emphasis": "result",
+      "eyebrow": "02 / RESOLUTION",
+      "transition": "cut"
+    },
+    {
+      "n": 6,
+      "kind": "clip",
+      "src": "codex-workbench.webm",
+      "inSec": 34.5,
+      "durSec": 4.5,
+      "sourceType": "generated",
+      "liveState": false,
+      "caption": "CURATED WORKBENCH REPLAY",
+      "direction": {
+        "intent": "payoff",
+        "layout": "stage",
+        "energy": 0.25
+      },
+      "transition": "reveal",
+      "transitionSec": 0.6
+    },
+    {
+      "n": 7,
+      "kind": "cta",
+      "durSec": 3.8,
+      "eyebrow": "MAKE EVERY CLICK MATTER.",
+      "title": "Product Demo Director",
+      "titleLines": [
+        "Product Demo",
+        "Director"
+      ],
+      "emphasis": "Director",
+      "subtitle": "Give your product a story.",
+      "transition": "cut"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf8"><style>
+  *{margin:0;box-sizing:border-box}
+  body{background:var(--bg,#0c1310);font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;padding:54px 0;min-height:100vh;display:flex;align-items:center;justify-content:center}
+  .term{width:1240px;margin:0 auto;background:#0f1814;border:1px solid #1d2a23;border-radius:16px;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.55)}
+  .bar{display:flex;align-items:center;gap:9px;padding:15px 18px;background:#13201a;border-bottom:1px solid #1d2a23}
+  .dot{width:13px;height:13px;border-radius:50%}.r{background:#ff5f57}.y{background:#febc2e}.g{background:#28c840}
+  .ttl{margin-left:14px;color:#5f7468;font-size:15px;font-weight:600}
+  .body{padding:28px 32px;font-size:21px;line-height:1.95;min-height:420px;max-height:760px;overflow:hidden}
+  .wrap{transition:transform .45s cubic-bezier(.4,0,.2,1)}
+  /* hidden lines take no space: the window hugs its content and grows line by line */
+  .ln{display:none;opacity:0;transform:translateY(8px);transition:opacity .35s ease,transform .35s ease}
+  .ln.on{opacity:1;transform:none}
+  .usr{color:#6f857a}.usr b{color:#aebcb4;font-weight:600}
+  .say{color:var(--ink,#eaf2ee)}
+  .tool .pin{color:var(--accent,#46b07c);font-weight:700}.tool .cmd{color:#c8d3cc}
+  .res{color:#7e9488;padding-left:30px}
+  .ok{color:var(--accent,#46b07c);font-weight:700}
+  .fin{color:var(--ink,#eaf2ee);font-weight:600}
+  .cur{display:inline-block;width:11px;height:22px;background:var(--accent,#46b07c);vertical-align:-4px;margin-left:4px;animation:bl 1s steps(1) infinite}
+  @keyframes bl{50%{opacity:0}}
+  .sp{height:14px}
+</style></head><body>
+  <div class="term">
+    <div class="bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="ttl">auto-improve — improve.py</div></div>
+    <div class="body" id="b"><div class="wrap" id="w">
+      <div class="ln tool" data-ms="1100"><span class="pin">⏺</span> <span class="cmd">pairwise: [Candidate, Champion] and [Champion, Candidate] — shuffled, judged twice</span></div>
+      <div class="ln res" data-ms="815">⎿  [Iter 4/8] [KEEP] output paths named per step <span class="ok">76 -&gt; 80</span></div>
+      <div class="ln res" data-ms="716">⎿  [Iter 5/8] discarded — champion wins</div>
+      <div class="ln res" data-ms="892">⎿  [Iter 6/8] [KEEP] states what skipping step 0c costs <span class="ok">80 -&gt; 84</span></div>
+      <div class="ln res" data-ms="716">⎿  [Iter 7/8] discarded — champion wins</div>
+      <div class="sp ln"></div>
+      <div class="ln fin" data-ms="756">final grade incoming…<span class="cur"></span></div>
+    </div></div>
+  </div>
+  <script>
+    const body=document.getElementById('b'), wrap=document.getElementById('w');
+    const lns=[...document.querySelectorAll('.ln')];
+    let shift=0;
+    function follow(ln){ // keep the newest line inside the window (scroll-follow, like a real terminal)
+      const bottom=ln.offsetTop+ln.offsetHeight, view=body.clientHeight-28;
+      if(bottom-shift>view){ shift=bottom-view; wrap.style.transform=`translateY(${-shift}px)`; }
+    }
+    function typeInto(ln,cb){ // the user prompt types itself
+      const t=ln.querySelector('.typed'); const full=t.dataset.text; let j=0;
+      (function tick(){ if(j>full.length){ cb(); return; } t.textContent=full.slice(0,j); j++; setTimeout(tick,26); })();
+    }
+    let i=0;(function step(){
+      if(i>=lns.length) return;
+      const ln=lns[i]; ln.style.display='block'; void ln.offsetHeight; ln.classList.add('on'); follow(ln);
+      const ms=parseInt(ln.dataset.ms||'700',10); i++;
+      if(ln.querySelector('.typed')) typeInto(ln,()=>setTimeout(step,320));
+      else setTimeout(step,ms);
+    })();
+  </script>
+</body></html>

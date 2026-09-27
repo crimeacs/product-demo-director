@@ -31,7 +31,9 @@ def main() -> None:
     try:
         with open(script_path) as fh:
             script = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
+        if not isinstance(script, dict):
+            raise ValueError("script.json must contain an object, not a bare list or scalar")
+    except (OSError, ValueError) as exc:
         print(json.dumps({"status": "fail", "errors": 1, "warnings": 0,
                           "findings": [{"severity": "error", "code": "SCRIPT_INVALID",
                                         "message": str(exc), "path": script_path}]}))

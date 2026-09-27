@@ -1,0 +1,17 @@
+{
+  "name": "Product Demo Director",
+  "theme": {
+    "bg": "#101613",
+    "ink": "#f1f4ef",
+    "accent": "#86dfac",
+    "accentDeep": "#296c4e",
+    "sub": "rgba(241,244,239,0.6)",
+    "grad": "#203329",
+    "line": "rgba(241,244,239,0.14)"
+  },
+  "cta": {
+    "name": "Product Demo ",
+    "accent": "Director",
+    "url": "github.com/crimeacs/product-demo-director"
+  }
+}
