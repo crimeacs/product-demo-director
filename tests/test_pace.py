@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+import copy
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
@@ -56,6 +57,37 @@ class PaceTests(unittest.TestCase):
         script["narrationMap"] = script["narrationMap"][:-1]
         with self.assertRaises(PaceError):
             pace_script(script)
+
+    def test_pacing_cannot_resize_an_authored_source_timeline(self):
+        script = self.script()
+        script["shots"][0]["sourceTimeline"] = [
+            {"fromSec": 0, "toSec": 2.5, "durSec": 2.5, "mode": "realtime"},
+        ]
+        before = copy.deepcopy(script)
+        with self.assertRaisesRegex(PaceError, "pace narration before mapping"):
+            pace_script(script)
+        self.assertEqual(before, script)
+
+    def test_existing_map_is_preserved_when_paced_frame_duration_is_unchanged(self):
+        script = self.script()
+        plan = pace_script(script)
+        apply_plan(script, plan)
+        duration = script["shots"][0]["durSec"]
+        mapping = [{"fromSec": 0, "toSec": duration, "durSec": duration, "mode": "realtime"}]
+        script["shots"][0]["sourceTimeline"] = copy.deepcopy(mapping)
+        apply_plan(script, pace_script(script))
+        self.assertEqual(mapping, script["shots"][0]["sourceTimeline"])
+
+    def test_applying_old_pace_plan_fails_atomically_if_it_would_resize_a_map(self):
+        script = self.script()
+        plan = pace_script(script)
+        script["shots"][1]["sourceTimeline"] = [
+            {"fromSec": 0, "toSec": 3.5, "durSec": 3.5, "mode": "realtime"},
+        ]
+        before = copy.deepcopy(script)
+        with self.assertRaisesRegex(PaceError, "pace narration before mapping"):
+            apply_plan(script, plan)
+        self.assertEqual(before, script)
 
 
 if __name__ == "__main__":

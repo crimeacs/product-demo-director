@@ -22,9 +22,34 @@ import subprocess
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable
 
+try:
+    from .direction import source_rectangle, validate_direction
+    from .editorial import audit_editorial, narration_cue_shots
+    from .framing import MAX_CAMERA_SCALE
+    from .source_timing import compile_source_timeline, output_times_for_source, validate_source_timing
+except ImportError:
+    from direction import source_rectangle, validate_direction
+    from editorial import audit_editorial, narration_cue_shots
+    from framing import MAX_CAMERA_SCALE
+    from source_timing import compile_source_timeline, output_times_for_source, validate_source_timing
+
 
 ALLOWED_KINDS = {"title", "clip", "split", "stat", "cta", "score", "bars", "strip"}
 CARD_KINDS = {"title", "stat", "cta", "score", "bars"}
+PRESENTATION_SOURCE_TYPES = {"slide", "generated"}
+VISUAL_TREATMENTS = {"presentation", "recording", "replay"}
+
+
+def is_presentation_shot(shot: dict[str, Any]) -> bool:
+    """Classify authored visual content, independently of its encoded media format.
+
+    A typeset result does not become product footage when exported to MP4. Explicit
+    treatment covers externally sourced graphics, while intrinsic card/generated
+    declarations cannot be exempted by labelling them as recordings.
+    """
+    return (shot.get("kind") in CARD_KINDS
+            or shot.get("sourceType") in PRESENTATION_SOURCE_TYPES
+            or shot.get("visualTreatment") == "presentation")
 
 SAVE_THE_CAT_BEATS = (
     "opening-image",
@@ -136,17 +161,63 @@ def sha256_file(path: str) -> str:
 def media_duration(path: str) -> float | None:
     if not shutil.which("ffprobe"):
         return None
-    proc = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", path],
-        capture_output=True, text=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", path],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
     if proc.returncode != 0:
         return None
     try:
-        return float(proc.stdout.strip())
+        duration = float(proc.stdout.strip())
+        return duration if math.isfinite(duration) and duration > 0 else None
     except ValueError:
         return None
+
+
+def media_picture_duration(path: str) -> float | None:
+    """Video-stream extent; container duration can include a longer audio tail."""
+    if not shutil.which("ffprobe"):
+        return None
+    try:
+        proc = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
+            capture_output=True, text=True, timeout=30,
+        )
+        if proc.returncode:
+            return None
+        duration = float(proc.stdout.strip())
+        return duration if math.isfinite(duration) and duration > 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+
+
+def media_dimensions(path: str) -> tuple[float, float] | None:
+    """Display dimensions, including non-square pixels and quarter-turn orientation."""
+    try:
+        proc = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                               "-show_entries", "stream=width,height,sample_aspect_ratio:stream_side_data=rotation",
+                               "-of", "json", path], capture_output=True, text=True, timeout=30)
+        if proc.returncode:
+            return None
+        stream = json.loads(proc.stdout)["streams"][0]
+        width, height = float(stream["width"]), float(stream["height"])
+        ratio = str(stream.get("sample_aspect_ratio", "1:1")).split(":")
+        if len(ratio) == 2 and float(ratio[1]) > 0:
+            width *= float(ratio[0]) / float(ratio[1])
+        rotation = next((float(data["rotation"]) for data in stream.get("side_data_list", [])
+                         if "rotation" in data), 0)
+        if abs(rotation) % 180 == 90:
+            width, height = height, width
+        if all(math.isfinite(v) and v > 0 for v in (width, height)):
+            return width, height
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, IndexError, TypeError):
+        pass
+    return None
 
 
 def timeline(shots: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -169,7 +240,7 @@ def _number(value: Any, default: float = 0.0) -> float:
 
 
 def _asset_path(project: str, value: str | None) -> str | None:
-    if not value:
+    if not isinstance(value, str) or not value:
         return None
     if os.path.isabs(value):
         return value
@@ -286,6 +357,13 @@ def _camera_changes(shot: dict[str, Any]) -> list[str]:
             changed.append(key)
     if shot.get("zooms"):
         changed.append("zooms")
+    camera = shot.get("camera")
+    if isinstance(camera, list) and any(isinstance(point, dict) and _number(point.get("scale"), 1.0) != 1
+                                      for point in camera):
+        changed.append("camera")
+    if shot.get("sourceDetail") or (isinstance(shot.get("framing"), dict)
+                                    and shot["framing"].get("presentation") == "detail"):
+        changed.append("source detail")
     return changed
 
 
@@ -319,8 +397,96 @@ def _cursor_inside_zoom(x: float, y: float, zoom: dict[str, Any], margin: float)
             and cy - half + inset <= y <= cy + half - inset)
 
 
+def _cursor_inside_camera(x: float, y: float, camera: list, time: float, margin: float,
+                          source_dimensions: tuple[float, float] | None = None,
+                          object_fit: str = "cover") -> bool:
+    """Mirror studio-motion's bounded endpoint interpolation in source percentages."""
+    # The renderer sorts by time and the final authored pose wins at duplicates.
+    by_time = {p["atSec"]: p for p in camera if isinstance(p, dict)
+               and isinstance(p.get("atSec"), (int, float)) and not isinstance(p["atSec"], bool)
+               and math.isfinite(p["atSec"])}
+    points = [by_time[t] for t in sorted(by_time)]
+    if not points:
+        return True
+    # Match the source plane used by ClipView before applying the camera. Percent
+    # geometry belongs to the decoded source, not to its letterboxed/cropped frame.
+    sx = sy = 1.0
+    if source_dimensions:
+        width, height = source_dimensions
+        fit = (min if object_fit == "contain" else max)(1920 / width, 1080 / height)
+        sx, sy = width * fit / 1920, height * fit / 1080
+    ox, oy = 50 * (1 - sx), 50 * (1 - sy)
+    x, y = ox + x * sx, oy + y * sy
+
+    def bound_axis(position, scale, offset, extent):
+        if extent * scale < 100:
+            return 50 - (offset + extent / 2) * scale
+        return max(100 - (offset + extent) * scale, min(-offset * scale, position))
+
+    def bound(pose):
+        scale, tx, ty = pose
+        return scale, bound_axis(tx, scale, ox, sx * 100), bound_axis(ty, scale, oy, sy * 100)
+
+    def pose(point):
+        scale = max(1.0, min(MAX_CAMERA_SCALE, _number(point.get("scale"), 1)))
+        cx = ox + _number(point.get("focusX"), 50) * sx
+        cy = oy + _number(point.get("focusY"), 50) * sy
+        return bound((scale, 50 - cx * scale, 50 - cy * scale))
+
+    def interpolate(previous, following, t):
+        before, after = pose(previous), pose(following)
+        scale = before[0] + (after[0] - before[0]) * t
+        values = [scale]
+        for index, offset, extent in ((1, ox, sx * 100), (2, oy, sy * 100)):
+            if min(before[0], after[0]) * extent >= 100:
+                values.append(before[index] + (after[index] - before[index]) * t)
+                continue
+            center = 50 - (offset + extent / 2) * scale
+            if extent * scale <= 100:
+                values.append(center)
+                continue
+            covered = before if before[0] > after[0] else after
+            available = (extent * scale - 100) / (extent * covered[0] - 100)
+            covered_center = 50 - (offset + extent / 2) * covered[0]
+            values.append(center + (covered[index] - covered_center) * available ** 3)
+        return bound(tuple(values))
+
+    result = pose(points[-1])
+    if time <= points[0]["atSec"]:
+        result = pose(points[0])
+    else:
+        for previous, following in zip(points, points[1:]):
+            if time > following["atSec"]:
+                continue
+            span = following["atSec"] - previous["atSec"]
+            t = max(0, min(1, (time - previous["atSec"]) / max(1e-9, span)))
+            ease = following.get("ease", "smooth")
+            if ease == "drive":
+                t = t ** 4 * (15 + t * (-24 + 10 * t))
+            elif ease == "settle":
+                t = t ** 3 * (20 + t * (-45 + t * (36 - 10 * t)))
+            elif ease != "linear":
+                t = t ** 3 * (10 + t * (-15 + 6 * t))
+            result = interpolate(previous, following, t)
+            break
+    scale, tx, ty = result
+    return margin <= x * scale + tx <= 100 - margin and margin <= y * scale + ty <= 100 - margin
+
+
+def _detail_source_rect(shot: dict[str, Any]) -> dict[str, float] | None:
+    """Accept authored or compiler-produced detail geometry for cursor contracts."""
+    detail = shot.get("sourceDetail")
+    rect = detail.get("sourceRect") if isinstance(detail, dict) else None
+    framing = shot.get("framing")
+    if rect is None and isinstance(framing, dict) and framing.get("presentation") == "detail":
+        beats = framing.get("beats")
+        if isinstance(beats, list) and len(beats) == 1 and isinstance(beats[0], dict):
+            rect = beats[0].get("rect")
+    return source_rectangle(rect)
+
+
 def _validate_cursor(project: str, shot: dict[str, Any], production: dict[str, Any],
-                     findings: list[Finding]) -> None:
+                     findings: list[Finding], *, fps: float = 30) -> None:
     required = bool(shot.get("cursorRequired") or production.get("requireCursorEvents"))
     margin = _number(shot.get("cursorSafeMarginPct"),
                      _number(production.get("cursorSafeMarginPct"), 0.0))
@@ -330,19 +496,57 @@ def _validate_cursor(project: str, shot: dict[str, Any], production: dict[str, A
                                  "cursor-safe footage requires a readable interaction sidecar",
                                  shot.get("n"), path))
         return
-    if not events or margin <= 0:
+    detail_rect = _detail_source_rect(shot)
+    source_window = source_rectangle(shot.get("sourceWindow"))
+    if not events or (margin <= 0 and detail_rect is None and source_window is None):
         return
-    in_sec = _number(shot.get("inSec"), 0.0)
     dur = _number(shot.get("durSec"), 0.0)
     zooms = shot.get("zooms") or []
+    camera = shot.get("camera")
+    dimensions = media_dimensions(_asset_path(project, shot.get("src"))) if camera else None
     for event in events:
-        if event.get("type") != "click" or "xPct" not in event or "yPct" not in event:
+        if not isinstance(event, dict) or event.get("type") != "click" or "xPct" not in event or "yPct" not in event:
             continue
         source_t = _number(event.get("t"), -1.0)
-        rel_t = source_t - in_sec
-        if rel_t < 0 or rel_t > dur:
+        try:
+            times = output_times_for_source(shot, source_t, fps=fps)
+        except ValueError:
+            continue  # The source-timing validator reports malformed maps separately.
+        if not times:
+            continue
+        if len(times) > 1:
+            # A frozen click remains visible while the camera moves. Check every
+            # authored pose in that interval, plus its final displayed frame.
+            start, end = min(times), max(times)
+            times.append(min(end, max(0, dur - 1 / fps)))
+            times.extend(point["atSec"] for point in camera or [] if isinstance(point, dict)
+                         and isinstance(point.get("atSec"), (int, float)) and start <= point["atSec"] <= end)
+            for zoom in zooms:
+                for edge in (_number(zoom.get("atSec")), _number(zoom.get("atSec")) + _number(zoom.get("durSec"))):
+                    if start <= edge <= end:
+                        times.append(edge)
+        times = sorted(set(time for time in times if 0 <= time < dur))
+        if not times:
             continue
         x, y = _number(event.get("xPct"), -1.0), _number(event.get("yPct"), -1.0)
+        if source_window:
+            local_x = (x - source_window["x"]) / source_window["width"] * 100
+            local_y = (y - source_window["y"]) / source_window["height"] * 100
+            window_margin = max(0, margin)
+            if not (window_margin - 1e-9 <= local_x <= 100 - window_margin + 1e-9
+                    and window_margin - 1e-9 <= local_y <= 100 - window_margin + 1e-9):
+                findings.append(_finding("error", "CURSOR_SOURCE_WINDOW_CROP",
+                                         f"click at {source_t:.2f}s falls outside the isolated source window's safe area",
+                                         shot.get("n"), path))
+        if detail_rect:
+            detail_margin = max(0, margin)
+            local_x = (x - detail_rect["x"]) / detail_rect["width"] * 100
+            local_y = (y - detail_rect["y"]) / detail_rect["height"] * 100
+            if not (detail_margin - 1e-9 <= local_x <= 100 - detail_margin + 1e-9
+                    and detail_margin - 1e-9 <= local_y <= 100 - detail_margin + 1e-9):
+                findings.append(_finding("error", "CURSOR_DETAIL_CROP",
+                                         f"click at {source_t:.2f}s falls outside the complete detail rectangle's safe area",
+                                         shot.get("n"), path))
         if not (margin <= x <= 100.0 - margin and margin <= y <= 100.0 - margin):
             findings.append(_finding(
                 "error", "CURSOR_RAW_MARGIN",
@@ -352,12 +556,18 @@ def _validate_cursor(project: str, shot: dict[str, Any], production: dict[str, A
         for zoom in zooms:
             start = _number(zoom.get("atSec"), 0.0)
             end = start + _number(zoom.get("durSec"), 0.0)
-            if start <= rel_t <= end and not _cursor_inside_zoom(x, y, zoom, margin):
+            if any(start <= time <= end for time in times) and not _cursor_inside_zoom(x, y, zoom, margin):
                 findings.append(_finding(
                     "error", "CURSOR_ZOOM_CROP",
                     f"click at {source_t:.2f}s falls outside the zoomed viewport safe area",
                     shot.get("n"), path,
                 ))
+        if isinstance(camera, list) and any(not _cursor_inside_camera(
+                x, y, camera, time, margin, dimensions,
+                "contain" if shot.get("preserveFraming") else shot.get("objectFit", "cover")) for time in times):
+            findings.append(_finding("error", "CURSOR_CAMERA_CROP",
+                                     f"click at {source_t:.2f}s falls outside the camera's viewport safe area",
+                                     shot.get("n"), path))
 
 
 def _claim_evidence_exists(project: str, evidence: Any) -> bool:
@@ -369,7 +579,11 @@ def _claim_evidence_exists(project: str, evidence: Any) -> bool:
         if re.match(r"^[a-z]+://", value, re.I):
             continue
         path = value if os.path.isabs(value) else os.path.join(project, value)
-        if not os.path.exists(path):
+        try:
+            present = os.path.isfile(path) and os.path.getsize(path) > 0
+        except OSError:
+            present = False
+        if not present:
             return False
     return True
 
@@ -391,7 +605,7 @@ def _validate_claims(script: dict[str, Any], project: str, production: dict[str,
                 findings.append(_finding("error", "CLAIM_UNVERIFIED", f"claim {cid} is not verified"))
             if not _claim_evidence_exists(project, claim.get("evidence")):
                 findings.append(_finding("error", "CLAIM_EVIDENCE_MISSING",
-                                         f"claim {cid} has no resolvable evidence"))
+                                         f"claim {cid} needs nonempty local evidence files or external evidence URLs"))
     for shot in script.get("shots", []) or []:
         for cid in shot.get("claimIds", []) or []:
             if str(cid) not in claim_map:
@@ -401,6 +615,8 @@ def _validate_claims(script: dict[str, Any], project: str, production: dict[str,
 
 def _map_narration_text(script: dict[str, Any]) -> str:
     entries = script.get("narrationMap") or []
+    if not isinstance(entries, list):
+        return ""
     return "\n\n".join(
         str(entry.get("text", "") or "").strip()
         for entry in entries
@@ -418,9 +634,13 @@ def narration_cut_conflicts(entries: Iterable[dict[str, Any]], boundaries: Itera
                             tolerance: float = 0.05) -> list[dict[str, Any]]:
     """Return picture cuts that land inside a mapped spoken thought."""
     conflicts: list[dict[str, Any]] = []
+    entries = list(entries)
+    tolerance = max(0.0, _number(tolerance, 0.05))
     for boundary in boundaries:
         cut = _number(boundary, -1.0)
         for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                continue
             start = _number(entry.get("startSec"), -1.0)
             end = _number(entry.get("endSec"), -1.0)
             if start < 0 or end <= start:
@@ -436,6 +656,17 @@ def _validate_audio_master(script: dict[str, Any], project: str, total: float,
     # ``narration`` is the new engine-mix contract. ``finalNarration`` remains a valid
     # externally-finished master contract and is verified without changing render behavior.
     block = script.get("narration") or script.get("finalNarration")
+    if production.get("narrationCutPolicy") == "continuous-audio":
+        master = script.get("narration")
+        master_path = _asset_path(project, master.get("file")) if isinstance(master, dict) else None
+        timing_path = _asset_path(project, master.get("timingFile")) if isinstance(master, dict) else None
+        if (not master_path or not os.path.isfile(master_path) or not timing_path
+                or not os.path.isfile(timing_path) or master.get("mix", True) is not True):
+            findings.append(_finding("error", "CONTINUOUS_AUDIO_MASTER_REQUIRED",
+                                     "continuous-audio requires an existing mixed narration.file and timingFile; it edits picture beneath the supplied master"))
+        if production.get("autoPaceNarration"):
+            findings.append(_finding("error", "CONTINUOUS_AUDIO_AUTOPACE_CONFLICT",
+                                     "continuous-audio is a manual picture edit; disable autoPaceNarration"))
     if not isinstance(block, dict):
         return
     value = block.get("file") or block.get("edit")
@@ -443,7 +674,7 @@ def _validate_audio_master(script: dict[str, Any], project: str, total: float,
     generated_text = str(block.get("text", "") or "").strip()
     if block.get("fromMap"):
         generated_text = _map_narration_text(script)
-    if not path or not os.path.exists(path):
+    if not path or not os.path.isfile(path):
         if allow_pending and script.get("narration") and generated_text:
             findings.append(_finding(
                 "warning", "NARRATION_PENDING_GENERATION",
@@ -454,8 +685,12 @@ def _validate_audio_master(script: dict[str, Any], project: str, total: float,
         findings.append(_finding("error", "NARRATION_MISSING", "narration master is missing", path=path))
         return
     actual = media_duration(path)
-    start = _number(block.get("startsAtSec"), 0.0)
-    tolerance = _number(block.get("durationToleranceSec"), 0.05)
+    start = _number(block.get("startsAtSec", 0.0), -1.0)
+    if start < 0:
+        findings.append(_finding("error", "NARRATION_START_INVALID",
+                                 "narration.startsAtSec must be finite and nonnegative", path=path))
+        start = 0.0
+    tolerance = max(0.0, _number(block.get("durationToleranceSec"), 0.05))
     if actual is not None and start + actual > total + tolerance:
         findings.append(_finding(
             "error", "NARRATION_OVERRUN",
@@ -475,6 +710,15 @@ def _validate_audio_master(script: dict[str, Any], project: str, total: float,
     if expected_hash and sha256_file(path).lower() != str(expected_hash).lower():
         findings.append(_finding("error", "NARRATION_HASH_MISMATCH",
                                  "narration master does not match its locked SHA-256", path=path))
+    if block.get("timingFile"):
+        timing_path = _asset_path(project, block.get("timingFile"))
+        if not timing_path or not os.path.isfile(timing_path):
+            findings.append(_finding("error", "NARRATION_TIMING_MISSING",
+                                     "narration character alignment file is missing", path=timing_path))
+        elif (block.get("timingSha256")
+              and sha256_file(timing_path).lower() != str(block["timingSha256"]).lower()):
+            findings.append(_finding("error", "NARRATION_TIMING_HASH_MISMATCH",
+                                     "narration timing does not match its locked SHA-256", path=timing_path))
     expected_sec = _number(block.get("expectedDurationSec"), 0.0)
     if expected_sec > 0:
         if actual is None:
@@ -507,7 +751,7 @@ def _validate_narration_map(script: dict[str, Any], rows: list[dict[str, Any]], 
                             *, allow_pending: bool = False) -> None:
     entries = script.get("narrationMap")
     if not entries:
-        if production.get("requireNarrationMap"):
+        if production.get("requireNarrationMap") or production.get("narrationCutPolicy") == "continuous-audio":
             findings.append(_finding(
                 "error", "NARRATION_MAP_REQUIRED",
                 "this profile requires narrationMap so picture cuts can be locked to complete thoughts",
@@ -522,6 +766,7 @@ def _validate_narration_map(script: dict[str, Any], rows: list[dict[str, Any]], 
     previous_end = -1.0
     mapped_shots: list[int] = []
     mapped_text: list[str] = []
+    shot_order = {row["n"]: index for index, row in enumerate(rows) if type(row["n"]) is int}
     for i, entry in enumerate(entries):
         if not isinstance(entry, dict):
             findings.append(_finding("error", "NARRATION_MAP_ENTRY_INVALID",
@@ -539,19 +784,23 @@ def _validate_narration_map(script: dict[str, Any], rows: list[dict[str, Any]], 
                         f"narrationMap[{i}] carries too many clauses for one visual focus; split the thought",
                         entry.get("shotN"),
                     ))
-        elif production.get("requireNarrationMapCoverage") or from_map:
+        elif (production.get("requireNarrationMapCoverage") or from_map
+              or production.get("narrationCutPolicy") == "continuous-audio"):
             findings.append(_finding("error", "NARRATION_MAP_TEXT_MISSING",
                                      f"narrationMap[{i}] needs the exact spoken thought"))
-        shot_n = entry.get("shotN")
-        if shot_n is not None:
-            if not isinstance(shot_n, int) or not any(r["shot"].get("n") == shot_n for r in rows):
-                findings.append(_finding("error", "NARRATION_MAP_SHOT_INVALID",
-                                         f"narrationMap[{i}] references unknown shotN {shot_n!r}"))
-            else:
-                mapped_shots.append(shot_n)
+        members, assignment_error = narration_cue_shots(entry, shot_order)
+        shot_n = members[0] if members else None
+        if assignment_error:
+            findings.append(_finding("error", "NARRATION_MAP_SHOT_INVALID",
+                                     f"narrationMap[{i}]: {assignment_error}"))
+        elif members:
+            mapped_shots.extend(members)
         elif production.get("autoPaceNarration"):
             findings.append(_finding("error", "NARRATION_MAP_SHOT_MISSING",
                                      f"narrationMap[{i}] needs shotN for automatic pacing"))
+        if "shotNs" in entry and production.get("autoPaceNarration"):
+            findings.append(_finding("error", "NARRATION_MAP_SPAN_AUTOPACE_CONFLICT",
+                                     f"narrationMap[{i}].shotNs requires a manual picture edit; disable autoPaceNarration"))
         has_range = entry.get("startSec") is not None and entry.get("endSec") is not None
         if not has_range:
             if allow_pending and script.get("narration") and (narration.get("text") or from_map):
@@ -565,6 +814,15 @@ def _validate_narration_map(script: dict[str, Any], rows: list[dict[str, Any]], 
         if start < 0 or end <= start:
             findings.append(_finding("error", "NARRATION_MAP_RANGE",
                                      f"narrationMap[{i}] has an invalid range"))
+            continue
+        if members and not (allow_pending and production.get("autoPaceNarration")):
+            first, last = rows[shot_order[members[0]]], rows[shot_order[members[-1]]]
+            if start < first["startSec"] - 0.05 or end > last["endSec"] + 0.05:
+                findings.append(_finding(
+                    "error", "NARRATION_MAP_SHOT_RANGE",
+                    f"narrationMap[{i}] falls outside its assigned picture interval {members}; pace the picture to the narration",
+                    shot_n,
+                ))
         if start < previous_end - 0.001:
             findings.append(_finding("error", "NARRATION_MAP_OVERLAP",
                                      f"narrationMap[{i}] overlaps the prior beat"))
@@ -580,7 +838,11 @@ def _validate_narration_map(script: dict[str, Any], rows: list[dict[str, Any]], 
     if previous_end > total + 0.05:
         findings.append(_finding("error", "NARRATION_MAP_OVERRUN",
                                  f"narration map ends at {previous_end:.3f}s after the {total:.3f}s picture"))
-    if mapped_shots and mapped_shots != sorted(mapped_shots):
+    # Overlapping assigned spans are valid when successive cues continue through
+    # the same picture interval; only a cue's first shot may not move backward.
+    mapped_order = [shot_order[members[0]] for entry in entries if isinstance(entry, dict)
+                    for members, error in [narration_cue_shots(entry, shot_order)] if members and not error]
+    if mapped_order != sorted(mapped_order):
         findings.append(_finding("error", "NARRATION_MAP_SHOT_ORDER",
                                  "narrationMap shotN values must progress in picture order"))
     if production.get("autoPaceNarration"):
@@ -592,7 +854,8 @@ def _validate_narration_map(script: dict[str, Any], rows: list[dict[str, Any]], 
                 "automatic pacing needs a narrated thought for every non-visual shot; missing "
                 + ", ".join(str(n) for n in missing),
             ))
-    if production.get("requireNarrationMapCoverage") or from_map:
+    if (production.get("requireNarrationMapCoverage") or from_map
+            or production.get("narrationCutPolicy") == "continuous-audio"):
         source = _map_narration_text(script) if from_map else str(narration.get("text", "") or "")
         if _spoken_text(source) != _spoken_text("\n\n".join(mapped_text)):
             findings.append(_finding(
@@ -600,7 +863,7 @@ def _validate_narration_map(script: dict[str, Any], rows: list[dict[str, Any]], 
                 "narrationMap text must cover the generated master exactly and in order",
             ))
     policy = str(production.get("narrationCutPolicy", "") or "")
-    if policy and policy != "between-thoughts":
+    if policy and policy not in {"between-thoughts", "continuous-audio"}:
         findings.append(_finding("error", "NARRATION_CUT_POLICY_UNKNOWN",
                                  f"unknown narrationCutPolicy: {policy}"))
     if policy == "between-thoughts" and not pending_timing:
@@ -741,11 +1004,41 @@ def _validate_wording(shots: list[dict[str, Any]], production: dict[str, Any],
                                          shot.get("n")))
 
 
+def _presentation_cut_error(left, right, project, fps):
+    """An authored view change may split one source without claiming an app state change."""
+    if left.get("kind") != "clip" or right.get("kind") != "clip":
+        return "presentationCut requires adjacent source clip shots"
+    reason = right.get("transitionReason")
+    if not isinstance(reason, str) or not reason.strip():
+        return "presentationCut requires a nonempty transitionReason describing the view change"
+    paths = [_asset_path(project, shot.get("src")) for shot in (left, right)]
+    if not all(paths) or os.path.realpath(paths[0]) != os.path.realpath(paths[1]):
+        return "presentationCut must keep the same source file"
+    left_detail, right_detail = _detail_source_rect(left), _detail_source_rect(right)
+    changed = bool(left_detail) != bool(right_detail)
+    if left_detail and right_detail:
+        changed = any(abs(left_detail[key] - right_detail[key]) > 1e-6
+                      for key in ("x", "y", "width", "height"))
+    if not changed:
+        return "presentationCut must switch context/detail or change the complete detail rectangle"
+    try:
+        left_plan, right_plan = compile_source_timeline(left, fps), compile_source_timeline(right, fps)
+    except (ValueError, TypeError, KeyError, OverflowError):
+        return "presentationCut requires valid source timing"
+    left_end = left_plan[-1]["sourceEndSec"] if left_plan else _number(left.get("inSec")) + _number(left.get("durSec"))
+    right_start = right_plan[0]["sourceStartSec"] if right_plan else _number(right.get("inSec"))
+    if abs(left_end - right_start) > 1 / fps + 1e-9:
+        return "presentationCut source time must remain contiguous and chronological within one frame"
+    return None
+
+
 def validate_script(script: dict[str, Any], project: str, profile_override: str | None = None,
                     *, allow_pending_narration: bool = False) -> list[Finding]:
     """Return deterministic errors/warnings without mutating the script or project."""
     project = os.path.abspath(project)
     findings: list[Finding] = []
+    findings.extend(Finding(**item) for item in validate_direction(script))
+    findings.extend(Finding(**item) for item in validate_source_timing(script))
     _, source_manifest_findings = resolve_source_manifests(script, project)
     findings.extend(source_manifest_findings)
     shots = script.get("shots")
@@ -754,15 +1047,39 @@ def validate_script(script: dict[str, Any], project: str, profile_override: str 
             "error", "SHOTS_MISSING", "script must contain a non-empty shots list"
         ))
         return findings
+    for index, shot in enumerate(shots):
+        if not isinstance(shot, dict):
+            findings.append(_finding("error", "SHOT_INVALID", "every shot must be an object",
+                                     path=f"shots[{index}]"))
+    if any(f.code == "SHOT_INVALID" for f in findings):
+        return findings
     production_raw = script.get("production") if isinstance(script.get("production"), dict) else {}
+    if any("sourceBeats" in shot for shot in shots):
+        audit_input = script
+        if allow_pending_narration and production_raw.get("autoPaceNarration"):
+            # Pre-synthesis/pre-pacing contracts cannot check the final cue-to-shot
+            # alignment. Keep declaration/cue identity checks, but defer timing.
+            audit_input = {**script, "narrationMap": [
+                {key: value for key, value in cue.items() if key not in {"startSec", "endSec"}}
+                if isinstance(cue, dict) else cue for cue in script.get("narrationMap", [])
+            ]} if isinstance(script.get("narrationMap", []), list) else script
+        findings.extend(Finding(**{key: value for key, value in item.items()
+                                   if key in {"severity", "code", "message", "shot", "path"}})
+                        for item in audit_editorial(audit_input)["findings"]
+                        if item["severity"] == "error" and not item["code"].startswith("SOURCE_TIMELINE_"))
     profile_name, production = _profile(production_raw, profile_override)
     if profile_name and profile_name not in PROFILES:
         findings.append(_finding("error", "PROFILE_UNKNOWN", f"unknown production profile: {profile_name}"))
     rows = timeline(shots)
     total = rows[-1]["endSec"] if rows else 0.0
+    fps = _number(script.get("fps"), 30.0)
+    if fps <= 0:
+        fps = 30.0
 
     seen: set[int] = set()
     durations: dict[str, float | None] = {}
+    picture_durations: dict[str, float | None] = {}
+    framing_dimensions: dict[str, tuple[float, float] | None] = {}
 
     def checked_duration(path: str) -> float | None:
         if path not in durations:
@@ -772,13 +1089,17 @@ def validate_script(script: dict[str, Any], project: str, profile_override: str 
     for index, row in enumerate(rows):
         shot = row["shot"]
         n = shot.get("n")
-        if not isinstance(n, int):
+        if type(n) is not int:
             findings.append(_finding("error", "SHOT_NUMBER_INVALID", "shot n must be an integer", path=f"shots[{index}]"))
         elif n in seen:
             findings.append(_finding("error", "SHOT_NUMBER_DUPLICATE", f"duplicate shot number {n}", n))
         else:
             seen.add(n)
         kind = shot.get("kind", "clip")
+        if "presentationCut" in shot and not isinstance(shot["presentationCut"], bool):
+            findings.append(_finding("error", "PRESENTATION_CUT_INVALID", "presentationCut must be an explicit boolean", n))
+        elif index == 0 and shot.get("presentationCut"):
+            findings.append(_finding("error", "PRESENTATION_CUT_INVALID", "The first shot has no preceding view for a presentationCut", n))
         if kind not in ALLOWED_KINDS:
             findings.append(_finding("error", "SHOT_KIND_INVALID", f"unsupported shot kind: {kind}", n))
         single_focus = bool(production.get("singleFocus") or production.get("singleVisualFocus"))
@@ -804,20 +1125,103 @@ def validate_script(script: dict[str, Any], project: str, profile_override: str 
             if not value or not path or not os.path.exists(path):
                 findings.append(_finding("error", "SHOT_ASSET_MISSING", f"missing {key}: {value}", n, path))
                 continue
+            framing = shot.get("framing")
+            if key == "src" and (isinstance(framing, dict) or "sourceWindow" in shot):
+                if path not in framing_dimensions:
+                    framing_dimensions[path] = media_dimensions(path)
+                dimensions = framing_dimensions[path]
+                if dimensions is None and "sourceWindow" in shot:
+                    findings.append(_finding("error", "SOURCE_WINDOW_DIMENSIONS_UNVERIFIED",
+                                             "Source isolation requires verified oriented source display dimensions", n, path))
+            if key == "src" and isinstance(framing, dict):
+                if dimensions is None:
+                    findings.append(_finding("error", "FRAMING_SOURCE_DIMENSIONS_UNVERIFIED",
+                                             "Measured framing requires verified source display dimensions, including orientation and pixel aspect ratio",
+                                             n, path))
+                else:
+                    try:
+                        declared = tuple(float(framing.get(axis)) for axis in ("sourceWidth", "sourceHeight"))
+                    except (TypeError, ValueError, OverflowError):
+                        declared = ()  # The declaration error is reported by validate_direction.
+                    if (declared and all(math.isfinite(value) and value > 0 for value in declared)
+                            and not all(math.isclose(authored, actual, rel_tol=0, abs_tol=0.5)
+                                        for authored, actual in zip(declared, dimensions))):
+                        findings.append(_finding("error", "FRAMING_SOURCE_DIMENSIONS_MISMATCH",
+                                                 f"Framing declares {declared[0]:g}×{declared[1]:g} but the source display is {dimensions[0]:g}×{dimensions[1]:g}; measure the oriented source with its pixel aspect ratio",
+                                                 n, path))
             if kind in {"clip", "split"}:
                 actual = checked_duration(path)
                 in_key = "inSec" if key == "src" else "inL" if key == "srcL" else "inR"
-                needed = _number(shot.get(in_key), 0.0) + row["durSec"]
+                if _number(shot.get(in_key, 0.0), -1.0) < 0:
+                    findings.append(_finding("error", "SOURCE_START_INVALID",
+                                             f"{in_key} must be finite and nonnegative", n))
+                source_plan = []
+                if kind == "clip" and "sourceTimeline" in shot:
+                    try:
+                        source_plan = compile_source_timeline(shot, fps)
+                    except ValueError:
+                        continue  # Reported by validate_source_timing above.
+                    if path not in picture_durations:
+                        picture_durations[path] = media_picture_duration(path)
+                    picture_duration = picture_durations[path]
+                    if picture_duration is None:
+                        findings.append(_finding("warning", "SOURCE_PICTURE_DURATION_UNCHECKED",
+                                                 "ffprobe could not verify video-stream duration; source timing bounds use container duration",
+                                                 n, path))
+                    else:
+                        actual = picture_duration
+                needed = (source_plan[-1]["sourceEndSec"] if source_plan
+                          else _number(shot.get(in_key), 0.0) + row["durSec"])
                 if actual is None:
                     findings.append(_finding("warning", "SOURCE_DURATION_UNCHECKED",
                                              f"ffprobe could not verify {key} duration", n, path))
                 elif needed > actual + 0.05:
                     findings.append(_finding("error", "SOURCE_RANGE_OVERRUN",
                                              f"{key} needs {needed:.3f}s but source is {actual:.3f}s", n, path))
+                if actual is not None and any(span["hold"] and span["sourceStartSec"] >= actual
+                                              for span in source_plan):
+                    findings.append(_finding("error", "SOURCE_HOLD_OUT_OF_RANGE",
+                                             "A reading hold must refer to a decoded source frame strictly before media end",
+                                             n, path))
         source_type = shot.get("sourceType")
+        if "evidenceExcerpt" in shot:
+            excerpt = shot["evidenceExcerpt"]
+            limits = {"finding": 90, "source": 72, "limitation": 100, "label": 72}
+            if (kind != "title" or not isinstance(excerpt, dict)
+                    or set(excerpt) != set(limits)
+                    or any(not isinstance(excerpt.get(key), str)
+                           or not excerpt[key].strip() or len(excerpt[key]) > maximum
+                           for key, maximum in limits.items())):
+                findings.append(_finding("error", "EVIDENCE_EXCERPT_INVALID",
+                                         "evidenceExcerpt requires a title shot and concise finding, source, limitation, and label strings", n))
+            if source_type not in {"generated", "slide"} or shot.get("visualTreatment") != "presentation":
+                findings.append(_finding("error", "EVIDENCE_EXCERPT_PRESENTATION_REQUIRED",
+                                         "An editorial evidence excerpt must declare generated/slide sourceType and presentation visualTreatment", n))
+            if not shot.get("claimIds"):
+                findings.append(_finding("error", "EVIDENCE_EXCERPT_SUPPORT_REQUIRED",
+                                         "An editorial evidence excerpt needs a claimIds reference to its recorded evidence", n))
         if source_type is not None and source_type not in {"product", "human", "slide", "external", "generated"}:
             findings.append(_finding("error", "SOURCE_TYPE_INVALID",
                                      "sourceType must be product, human, slide, external, or generated", n))
+        if "visualTreatment" in shot:
+            treatment = shot["visualTreatment"]
+            if not isinstance(treatment, str) or treatment not in VISUAL_TREATMENTS:
+                findings.append(_finding("error", "VISUAL_TREATMENT_INVALID",
+                                         "visualTreatment must be presentation, recording, or replay", n))
+            elif treatment in {"recording", "replay"} and is_presentation_shot(shot):
+                findings.append(_finding("error", "VISUAL_TREATMENT_CONFLICT",
+                                         "card kinds and slide/generated sources count as presentation; "
+                                         "recording/replay treatment cannot exempt them", n))
+            if treatment == "replay":
+                if shot.get("liveState") is not False:
+                    findings.append(_finding("error", "REPLAY_LIVE_STATE_CONFLICT",
+                                             "A reconstructed product replay must explicitly declare liveState=false", n))
+                provenance = shot.get("replayProvenance")
+                manifests = production.get("sourceManifests")
+                if (not isinstance(provenance, str) or not provenance.strip()
+                        or not isinstance(manifests, list) or provenance not in manifests):
+                    findings.append(_finding("error", "REPLAY_PROVENANCE_REQUIRED",
+                                             "A replay needs replayProvenance included in production.sourceManifests to bind its recorded data and reconstruction", n))
         if (production.get("requireContinuityIds") and kind == "clip"
                 and source_type == "product" and not shot.get("continuityId")):
             findings.append(_finding(
@@ -869,28 +1273,38 @@ def validate_script(script: dict[str, Any], project: str, profile_override: str 
             if shot.get("objectFit") == "cover" and not lock.get("allowCover"):
                 findings.append(_finding("error", "SOURCE_COVER_CROP",
                                          "source-locked footage must use objectFit=contain", n))
-        _validate_cursor(project, shot, production, findings)
+        _validate_cursor(project, shot, production, findings, fps=fps)
 
-    if production.get("enforceSameScreenContinuity"):
-        for left, right in zip(rows, rows[1:]):
-            a, b = left["shot"], right["shot"]
+    for left, right in zip(rows, rows[1:]):
+        a, b = left["shot"], right["shot"]
+        presentation_cut = False
+        if b.get("presentationCut") is True:
+            reason = _presentation_cut_error(a, b, project, fps)
+            presentation_cut = reason is None
+            if reason:
+                findings.append(_finding("error", "PRESENTATION_CUT_INVALID", reason, b.get("n")))
+        if production.get("enforceSameScreenContinuity"):
             aid, bid = a.get("continuityId"), b.get("continuityId")
             same_screen = aid and aid == bid and a.get("kind") == b.get("kind") == "clip"
             real_state_change = (a.get("stateId") is not None and b.get("stateId") is not None
                                  and a.get("stateId") != b.get("stateId"))
-            if same_screen and (not b.get("transitionReason") or not real_state_change):
+            if same_screen and not presentation_cut and (not b.get("transitionReason") or not real_state_change):
                 findings.append(_finding("error", "SAME_SCREEN_CUT",
-                                         f"continuityId={aid} is split without both a changed stateId and a declared route, app, or major state change; keep one clip with connected zoom regions",
+                                         f"continuityId={aid} is split without a changed application state or an explicit, source-contiguous detail presentationCut",
                                          b.get("n")))
     hard_max = _number(production.get("hardMaxSec"), 0.0)
     if hard_max and total > hard_max + 0.001:
         findings.append(_finding("error", "RUNTIME_OVER_HARD_MAX",
                                  f"runtime {total:.2f}s exceeds the {hard_max:.2f}s hard maximum"))
-    card_ratio = sum(r["durSec"] for r in rows if r["shot"].get("kind") in CARD_KINDS) / max(total, 0.001)
+    presentation_rows = [row for row in rows if is_presentation_shot(row["shot"])]
+    presentation_sec = sum(row["durSec"] for row in presentation_rows)
+    card_ratio = presentation_sec / max(total, 0.001)
     max_card = _number(production.get("maxCardRatio"), 0.0)
     if max_card and card_ratio > max_card + 1e-6:
         findings.append(_finding("error", "PRESENTATION_RATIO_HIGH",
-                                 f"cards occupy {card_ratio:.0%} of runtime; contract allows {max_card:.0%}"))
+                                 f"presentation occupies {card_ratio:.1%} of runtime "
+                                 f"({presentation_sec:.2f}s / {total:.2f}s); contract allows {max_card:.1%}. "
+                                 f"Counted shots: {', '.join(str(row['shot'].get('n')) for row in presentation_rows)}"))
     cta_max = _number(production.get("ctaMaxSec"), 0.0)
     for row in rows:
         if cta_max and row["shot"].get("kind") == "cta" and row["durSec"] > cta_max + 0.001:

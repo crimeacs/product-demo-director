@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -30,7 +30,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Install Python dependencies
-        run: python -m pip install -r tools/requirements.txt
+        run: python -m pip install -r tools/requirements.txt -r tests/requirements.txt
+      - name: Install Playwright Chromium (capture integration tests)
+        run: python -m playwright install --with-deps chromium
 
       - name: Install exact Remotion dependencies
         working-directory: engine
@@ -51,7 +53,7 @@ jobs:
         run: git diff --check
 
   secrets:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

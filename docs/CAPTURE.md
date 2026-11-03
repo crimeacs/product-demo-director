@@ -5,8 +5,8 @@ description: Capture clean, redacted product-demo footage from a live (auth-gate
 
 # Screen capturing (live web app → demo footage)
 
-Record a real, auth-gated product surface as smooth 1080p video with client data redacted at
-the source. Playwright drives a headless Chromium with `recordVideo`.
+Record a real product surface with sensitive data redacted at the source. Playwright drives
+Chromium; capture density and the logical viewport are separate choices.
 
 ## Auth into a gated app
 
@@ -36,14 +36,29 @@ the source. Playwright drives a headless Chromium with `recordVideo`.
 
 ## Smooth, legible motion
 
-- Capture at the final resolution (1920x1080) with `device_scale_factor=2` for crisp text. Configure the exact Playwright launch options:
+- Preserve enough native pixels for the intended crop. A 1920×1080 CSS viewport at DPR 2 does
+  **not** make a 1920×1080 recording a Retina source: the recording size still discards pixels.
+  Use opt-in `captureScale: 3` (or CLI `--capture-scale 3`) to retain 5760×3240 pixels while
+  keeping the same 1920×1080 layout, CSS click positions, and event percentages. Values 1–4 are
+  supported; the legacy default remains 1080p video. Equivalent Playwright options are:
   ```javascript
   const context = await browser.newContext({
     viewport: { width: 1920, height: 1080 },
-    deviceScaleFactor: 2,
-    recordVideo: { dir: './recordings', size: { width: 1920, height: 1080 } }
+    deviceScaleFactor: 3,
+    recordVideo: { dir: './recordings', size: { width: 5760, height: 3240 } }
   });
   ```
+- For a still, add `{"screenshot":"evidence.png"}` to capture steps. It writes a lossless,
+  viewport-sized PNG using `scale: "device"`, at the current recorded state, next to the raw
+  video. Filenames must be simple `.png` names. Use `--no-cursor` for an unannotated source
+  screenshot. Capture metadata records CSS viewport, device scale, actual video/PNG dimensions,
+  hashes, and screenshot times. `ffprobe` is required for opt-in density; mismatched video
+  dimensions fail instead of being labeled high-resolution. Existing bitmap images or canvases
+  may still be soft: inspect native pixels, not only file dimensions.
+  Opt-in density is applied at Chromium launch as well as context creation: an initial 1×
+  recorder frame can otherwise produce a small picture padded into a nominally large video.
+- Capture density cannot fix small delivery-size text, incomplete objects, or simultaneous page
+  and camera movement. Preserve complete semantic units and inspect the intended crop at 320px.
 - Scroll with a stepped `window.scrollBy` loop (~24 steps, ~40ms) — never jump:
   ```javascript
   for (let i = 0; i < 24; i++) {
@@ -82,7 +97,7 @@ it into `<project>/assets/<name>.mp4`:
 ```json
 { "shots": [
   { "name": "dash", "kind": "web", "url": "https://app.example.com",
-    "goal": "scroll the report, then click Run", "speed": 1.0 },
+    "goal": "scroll the report, then click Run", "speed": 1.0, "captureScale": 3 },
   { "name": "term_run", "kind": "terminal", "speed": 1.7,
     "transcript": [ {"role":"user","text":"..."}, {"role":"tool","text":"Bash(...)"} ] }
 ] }
@@ -92,6 +107,7 @@ it into `<project>/assets/<name>.mp4`:
 python tools/shoot.py --project projects/my-demo                 # shoot every shot
 python tools/shoot.py --project projects/my-demo --plan-only      # write/validate web plans, no recording
 python tools/shoot.py --url https://x.com --goal "tour it" --out a.mp4   # one-shot web
+python tools/capture.py --url https://x.com --steps steps.json --capture-scale 3 --out raw.webm
 ```
 
 For a **web** shot with no `steps`, the director *plans* it: it probes the live page (scroll height,
@@ -100,7 +116,21 @@ before recording — scroll targets are bounded, and a click is dropped unless i
 seen (a `fallback_selector` from the probe is attached). If planning is unavailable it falls back to
 a safe full-page scroll, so a shoot never hard-fails. Steps are written to `assets/<name>.steps.json`
 and reused on the next run (pass `--replan` to regenerate). Raw recordings land in `assets/_raw/`
-(gitignored); the normalized 1920×1080/30fps mp4 lands in `assets/`.
+(gitignored); the normalized MP4 lands in `assets/`. Default shots remain 1920×1080/30fps;
+opt-in density preserves the captured raster through normalization at 30fps. Each `.capture.json`
+sidecar binds raw and normalized video hashes and dimensions; event metadata keeps the logical
+CSS viewport rather than substituting the larger pixel dimensions. Raw PNGs remain untouched.
+
+The engine uses PNG composition frames and BT.709 output to avoid an intermediate JPEG loss.
+`tools/finish.py` now copies an already compliant H.264/yuv420p, limited-range BT.709 picture
+stream while finishing audio. Missing or different color tags still require a real conversion;
+`--video-mode encode` forces it, and `--video-mode copy` rejects incompatible input. The finish
+receipt records the chosen path and independent artifact QA still applies. Higher density costs
+memory and recording/encoding time; it does not establish motion cadence or creative quality.
+
+Reference: [Playwright video size](https://playwright.dev/python/docs/videos#record-video),
+[screenshot scale](https://playwright.dev/python/docs/api/class-page#page-screenshot-option-scale),
+and [Remotion image format](https://www.remotion.dev/docs/config#setvideoimageformat).
 
 LLM ladder (planning only, never hardcodes keys): the `anthropic` SDK if `ANTHROPIC_API_KEY` is set,
 else the `claude -p` CLI if present, else `google-genai` with `GEMINI_API_KEY`/`GOOGLE_API_KEY`.

@@ -11,6 +11,31 @@ per-shot TTS, one continuous generated performance, or one locked human narratio
 It binds every render to source hashes and integer frame boundaries, runs deterministic delivery QA,
 then lets a Gemini judge review story and taste.
 
+Before writing narration, choose the buyer's question and the recorded change that answers it.
+Inspect the strongest proof at delivery size, then build the shortest causal path to it. Preserve
+the initiating action and enough settled time to read the result. If the footage cannot support
+the intended claim, capture the missing evidence or narrow the claim; a zoom cannot supply it.
+Compare narrated quantities and absolute wording with the actual counts and limitations in the
+filmed evidence. A source reference or an approved claim label does not resolve a visible contradiction.
+
+Plan native capture density against the largest **delivery-frame** magnification, not only the
+phone preview. A 1080p export does not make a twice-enlarged 1× screenshot HD. Use `captureScale`
+2–4 for product footage that needs close-ups; retain that raster through normalization. Inspect
+thin glyph strokes at 100% and check the small-screen composition separately. A complete panel
+can be sharp yet too small to understand.
+
+When reconstructing an existing case with native product components, declare
+`visualTreatment: "replay"`, `liveState: false`, and a `replayProvenance` manifest listed in
+`production.sourceManifests`. Label the reconstruction visibly. Bind the frozen data **and the
+matching product revision**: updated business logic can change historical counts even when the
+packet is identical. Never portray a replay as a fresh recording or a new recorded decision.
+
+For a centered composition, opt into `direction.align: "center"` and place the complete product
+unit on a symmetric `screenRect` (`x + width / 2 = 50`). Keep one clear reading axis and reserve
+separate space for the product, the buyer's question, and a concise readout. The story should
+connect the pain to an observable workflow and its bounded outcome; centered decoration alone
+does not explain the product.
+
 ## Motion-graphics films (no footage)
 
 When the ask is a launch, brand or "slick, punchy, studio-level" ad rather than a footage demo, use the
@@ -98,10 +123,22 @@ python tools/music.py --project projects/my-demo
 # 2b. (optional) regenerate the bespoke SFX palette (a model listens and keeps the best/cue)
 python tools/sfx.py
 
+# 2c. DIRECTION — new drafts already use studio. Preview or enable it on an existing script.
+./pdd direct projects/my-demo
+# ./pdd direct projects/my-demo --write
+# Read docs/STUDIO_DIRECTION.md before authoring camera, type, transitions, annotations, or cues.
+# Give moves a visible reason; arrive, then hold. Never invent product coordinates or score values.
+
+# 2d. EDITORIAL — after narration pacing, anchor each important thought to an inspected source frame.
+./pdd editorial projects/my-demo --write
+# Read docs/EDITORIAL_DIRECTION.md for sourceBeats and sourceTimeline. Capture wall-clock marks
+# are not source timestamps. Keep actions in real time; compress only identified navigation.
+# Audit warnings prompt picture review. Unknown proof timing is not a quality pass.
+
 # 3. PREFLIGHT — block source, story, authority, claim, camera, and narration violations
 python tools/preflight.py --project projects/my-demo --strict
 
-# 4. ASSEMBLE + RENDER — exact integer-frame plan plus props.json, build-plan.json, artifact.json
+# 4. ASSEMBLE + RENDER — exact frames, compiled direction-plan.json, props, build plan, artifact
 python tools/build.py --project projects/my-demo --contracts strict
 
 # 5. FINISH — preserve exact frames while creating a two-pass loudness-normalized, BT.709 web master
@@ -113,16 +150,27 @@ python tools/finish.py --input projects/my-demo/out/demo.mp4 \
 python tools/qa.py --video projects/my-demo/out/demo-final.mp4 \
   --project projects/my-demo --require-artifact --strict
 
+# 6b. REVIEW — local film playback, searchable shots, narration, and bound delivery findings
+./pdd review projects/my-demo
+# Use --serve to review at a loopback URL with frame-accurate media seeking.
+# Return out/review.html alongside the final video. Regenerate after any source or story edits;
+# an old review page is a snapshot, not a fresh delivery check.
+
 # 7. JUDGE STORY/TASTE — only after deterministic QA; require the artifact manifest so a stale
 #    or similarly named MP4 cannot be reviewed by mistake.
 python tools/judge.py --video projects/my-demo/out/demo-final.mp4 \
   --require-artifact --all-lenses --runs 1 --fps 6 --context "what this demo is"
 
+# For requested motion review, submit the complete actual video at 24 fps, then verify
+# the temporal findings in playback. Use the requested model; static sheets are insufficient.
+python tools/judge.py --video projects/my-demo/out/demo-final.mp4 \
+  --require-artifact --model gemini-2.5-pro --lens motion --fps 24 --runs 1
+
 # 7a. BEFORE an improve loop: compare the bundled bad fixture with your approved local master
 python tools/judge.py --probe --probe-good projects/my-demo/out/demo-final.mp4
 
-# 8. ACCEPT/REJECT — after candidate QA, compare both display orders. Only a 2–0 candidate sweep
-#    outside the declared score noise exits successfully.
+# 8. OPTIONAL SCORED EXPERIMENT — compare both display orders after candidate QA.
+#    This command's 2–0 gate is an experiment policy, not a measure of viewer engagement.
 python tools/compare.py \
   --champion projects/my-demo/out/champion.mp4 \
   --champion-artifact projects/my-demo/out/champion-artifact.json \
@@ -144,13 +192,49 @@ or mastering belongs in the project's `audio/` files, and web-safe video normali
 export MP4. Keep these distinct from creative grading, and verify with `ffprobe`, `volumedetect`, and
 contact sheets before calling the artifact final.
 
-To iterate automatically, feed `judge.py`'s `specific_upgrades` back into the text/source artifacts
-and re-render (pairs well with github.com/crimeacs/auto-improve as the keep/revert gate). Improve
+To iterate, verify `judge.py`'s specific notes against the actual picture and sound before editing.
+Judge scores are advisory; do not tune a film to maximize them or claim measured engagement from
+them. Improve
 `script.json`, `brand.json`, skill docs, rubrics, or engine code directly; do not treat a binary MP4
-as the editable source of truth. Every candidate must pass deterministic gates first. Compare the
-champion and candidate in both display orders and ship only a 2–0 winner. A split or roughly
-two-point movement is noise. After three rejected in-point/zoom/pacing candidates, stop grinding cut
-mechanics; the next gain requires narration, product behavior, story structure, or fresh capture.
+as the editable source of truth. Every candidate must pass deterministic gates first. When using
+the optional scored comparison, review both display orders and retain the champion on a split or
+noise-level change. Evaluate comprehension, evidence timing, readability, and continuity directly.
+After repeated in-point/zoom/pacing changes fail to resolve the same note, revisit the narration,
+story structure, or capture. Builds retain exact input snapshots so prior decisions stay inspectable.
+
+For phone viewing, judge the film in a **320px-wide player**, with 390px as a second check; use a
+different width when the brief supplies one. A readable desktop render can become miniature UI at
+that size. Phone readability is necessary, but a frame of enlarged, severed UI fragments is still a
+weak composition. Choose a complete meaningful unit: the button with its label, a full status card,
+or the menu with its selected value. Keep qualifiers, units, consequences, and source labels visible.
+
+Use connected camera moves when the viewer needs the relationship between an action and its result.
+For new measured camera plans, include `framing.motion` (`{}` uses 1.5 screens/second and
+1.2 zoom octaves/second). Resolve infeasible moves with less travel, a wider view, justified extra
+time, or a cut that preserves source truth; preserve reading holds and actions. Source native FPS or 1× playback
+does not constrain rendered camera velocity, so diagnose those separately.
+For a complete inspected component at a natural story/state boundary, `framing.presentation="detail"`
+mounts its native source rectangle on a clean brand canvas. It requires one fixed rectangle for the
+whole shot; it does not justify cutting a sentence or inventing a state change. Reserve an actual
+settled reading hold after arrival. Use `framing.entranceSec: 0` when the plate should already be
+stationary on the first frame; omit it for the restrained default entrance. A detail plate retains
+source timing and pixels, with editorial title/context outside it; it does not recreate product text
+or hide a duplicate desktop behind it.
+
+Presentation ratio follows visual meaning, not the file extension: generated/slide clips count,
+and external encoded graphics need `visualTreatment: "presentation"` plus appropriate provenance
+labels. Native recordings and designed explanations can coexist when the brief warrants them;
+declare and assess that balance honestly. For motion review, inspect the whole exported sequence
+with sound and the requested 24 fps Google review. Its receipt records submitted sampling and model
+usage; neither static frames, model scores, nor passing QA establish production timing quality.
+
+Measure glyph ink height when available and inspect the rendered motion, not just the size estimate.
+If the complete unit cannot fit, choose a smaller complete unit or recapture a responsive layout with
+larger UI. Higher capture density improves sharpness, not the amount of information a small player
+can hold; enlarging soft text cannot recover missing detail. The review room's actual-width previews
+and bound framing reports support this inspection. Neither geometric checks nor delivery QA certify
+studio quality or engagement. See `docs/SMALL_SCREEN_FRAMING.md` for both presentation grammars and
+`docs/STUDIO_DIRECTION.md` for connected motion and the legacy OpenScreen timing behavior.
 
 ## Script schema
 
@@ -346,10 +430,16 @@ AI-washing to professional evaluators:
   execute reversible evidence gathering automatically; reserve the human action for the actual
   consequential boundary.
 - **Preflight rejects a same-screen cut** → combine the adjacent source excerpts into one clip and
-  use connected `zooms`. Add `transitionReason` only for a real route, application, or major state
-  change—not to silence the check.
-- **A crop makes the target larger but removes status, controls, or cursor** → widen or move the
-  focus region. Legibility includes the context that explains what the UI is doing.
+  use connected camera motion. A deliberate context/detail edit may use `presentationCut` only with
+  continuous source time, a complete native unit, and a concrete reason. Do not invent application
+  state changes to silence a check. An existing aligned narration master can continue across the
+  picture cut with `continuous-audio` and a cue's consecutive `shotNs` span.
+- **A crop makes text readable but leaves fragments of labels, controls, or sentences** → recompose
+  around the complete meaningful UI unit. Preserve spatial context with a connected camera move,
+  or use a complete native detail plate at a real story/state boundary. If that unit remains too
+  small or soft, change the capture. For a short recorded fact, an exact source-bound typeset excerpt
+  is also available through `term.py --focus-spec`; keep its explicit recorded/typeset label and
+  verify every word against the source. More zoom cannot supply missing context or source detail.
 - **A locked customer/founder source is cropped or punched in** → remove camera transforms and use
   `objectFit: "contain"`. Preserve the recorded framing unless the source owner approved a change.
 - **Global narration hash/duration fails** → restore the approved human master or deliberately

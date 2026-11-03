@@ -12,6 +12,16 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
 class CliScaffoldTests(unittest.TestCase):
+    def test_check_reports_invalid_top_level_script_without_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with open(os.path.join(directory, "script.json"), "w") as handle:
+                json.dump([], handle)
+            result = subprocess.run([sys.executable, os.path.join(ROOT, "pdd"),
+                                     "check", directory], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SCRIPT_INVALID", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
     def run_pdd(self, *args, home):
         env = os.environ.copy()
         env["HOME"] = home

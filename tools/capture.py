@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Capture smooth 'after' footage of a live web app with Playwright.
 
-Records 1920x1080 at 2x device scale, with stepped smooth-scroll and optional clicks,
-so the screen recording has motion the editor can push into. Drive it from a steps JSON.
+Records a 1920x1080 CSS viewport, with stepped smooth-scroll and optional clicks.
+Opt into --capture-scale 2/3/4 to retain device pixels in video and PNG screenshots.
+The legacy default records 1920x1080 video despite its 2x device scale.
 
     python tools/capture.py --url https://app.example.com --steps steps.json --out raw.webm
 
@@ -19,9 +20,10 @@ AUTH: most real apps are gated. Put your own sign-in in `auth_hook(context, page
 (magic link, cookie injection, basic form fill). It is a no-op by default.
 
 Requires: pip install playwright, plus either Playwright Chromium or a local Chrome/Chromium.
+High-density capture also requires ffprobe to verify the encoded pixel dimensions.
 Set PDD_BROWSER_EXECUTABLE to override browser discovery.
 """
-import argparse, json, os, time
+import argparse, hashlib, json, os, shutil, struct, subprocess, time
 from playwright.sync_api import sync_playwright
 
 W, H = 1920, 1080
@@ -104,34 +106,74 @@ def _browser_executable():
     return ""
 
 
-def _launch(p):
+def _launch(p, device_scale_factor=None):
     options = {"args": ["--force-color-profile=srgb", "--hide-scrollbars"]}
+    if device_scale_factor is not None:
+        # The recorder can see a 1x startup frame before context emulation settles.
+        # FFmpeg then keeps that input geometry and pads later high-DPI frames.
+        # Start Chromium at the requested density so its first picture is correct.
+        options["args"].append(f"--force-device-scale-factor={device_scale_factor}")
     executable = _browser_executable()
     if executable:
         options["executable_path"] = executable
     return p.chromium.launch(**options)
 
 
-def run(url, steps, out, scale=2, quiet=False, cursor=True):
+def capture_geometry(scale=2, capture_scale=None):
+    """Keep layout/events in CSS pixels; opt-in density controls the retained pixel plane."""
+    if capture_scale is not None and (type(capture_scale) is not int or capture_scale not in (1, 2, 3, 4)):
+        raise ValueError("capture_scale must be an integer from 1 to 4")
+    density = scale if capture_scale is None else capture_scale
+    return {"viewport": {"width": W, "height": H}, "device_scale_factor": density,
+            "record_video_size": {"width": W * (capture_scale or 1), "height": H * (capture_scale or 1)}}
+
+
+def media_dimensions(path):
+    result = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                             "stream=width,height", "-of", "json", str(path)],
+                            capture_output=True, text=True, check=True)
+    video = json.loads(result.stdout)["streams"][0]
+    return {"width": video["width"], "height": video["height"]}
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def run(url, steps, out, scale=2, quiet=False, cursor=True, capture_scale=None):
     """Record `url` following `steps`, write a webm to `out`, and RETURN the out path.
     Also writes <out-stem>.events.json — cursor clicks + scroll landings with timestamps —
     so the build can key engine zooms off real interactions."""
+    geometry = capture_geometry(scale, capture_scale)
+    if capture_scale is not None and not shutil.which("ffprobe"):
+        raise ValueError("ffprobe is required to verify high-density capture")
+    for step in steps:
+        if "screenshot" in step:
+            name = step["screenshot"]
+            if not isinstance(name, str) or os.path.basename(name) != name or not name.endswith(".png"):
+                raise ValueError("screenshot must be a PNG filename within the capture output directory")
     out_dir = os.path.dirname(os.path.abspath(out)) or "."
     os.makedirs(out_dir, exist_ok=True)
     events = []
+    screenshots = []
     last_cursor = [None, None]
     with sync_playwright() as p:
-        browser = _launch(p)
+        browser = (_launch(p) if capture_scale is None else _launch(p, device_scale_factor=capture_scale))
         context = browser.new_context(
-            viewport={"width": W, "height": H},
-            device_scale_factor=scale,
             record_video_dir=out_dir,
-            record_video_size={"width": W, "height": H},
+            **geometry,
         )
         page = context.new_page()
         t0 = time.monotonic()   # ~video start (recording begins with the page)
         auth_hook(context, page)
-        page.goto(url, wait_until="networkidle")
+        # Live Storybook and other development surfaces keep HMR/WebSocket traffic open,
+        # so networkidle is not a readiness signal and can time out on an otherwise-ready page.
+        # The authored capture steps provide the deliberate settling/readiness window.
+        page.goto(url, wait_until="domcontentloaded")
         page.wait_for_timeout(800)
         if cursor and not url.startswith("file://"):   # term footage has no pointer
             page.evaluate(CURSOR_JS)
@@ -198,6 +240,14 @@ def run(url, steps, out, scale=2, quiet=False, cursor=True):
                     if not quiet: print("  click_selector miss:", st["click_selector"], e)
                 page.wait_for_timeout(int(st.get("after", 1200)))
                 reinstall_cursor()
+            if "screenshot" in st:
+                screenshot_path = os.path.join(out_dir, st["screenshot"])
+                captured_at = round(time.monotonic() - t0, 4)
+                pixels = page.screenshot(path=screenshot_path, type="png", scale="device")
+                width, height = struct.unpack(">II", pixels[16:24])
+                screenshots.append({"path": screenshot_path, "sha256": file_sha256(screenshot_path),
+                                    "width": width, "height": height, "t": captured_at,
+                                    "scale": "device"})
         page.wait_for_timeout(600)
         video_path = page.video.path()
         context.close()
@@ -206,7 +256,23 @@ def run(url, steps, out, scale=2, quiet=False, cursor=True):
     if os.path.abspath(video_path) != os.path.abspath(out):
         os.replace(video_path, out)
     ev_path = os.path.splitext(out)[0] + ".events.json"
-    json.dump(events, open(ev_path, "w"), indent=2)
+    with open(ev_path, "w") as handle:
+        json.dump(events, handle, indent=2)
+    dimensions = media_dimensions(out) if shutil.which("ffprobe") else None
+    if capture_scale is not None and dimensions != geometry["record_video_size"]:
+        raise RuntimeError(f"capture dimensions differ: requested {geometry['record_video_size']}, observed {dimensions}")
+    metadata = {"schemaVersion": 1, "kind": "browser-capture", "captureScale": capture_scale,
+                "launchDeviceScaleFactor": capture_scale,
+                "viewportCss": geometry["viewport"], "deviceScaleFactor": geometry["device_scale_factor"],
+                "requestedVideoSize": geometry["record_video_size"],
+                "video": {"path": os.path.abspath(out), "sha256": file_sha256(out),
+                          "dimensionsVerified": dimensions is not None, **(dimensions or {})},
+                "eventCoordinateSpace": "css-viewport", "clickCoordinateUnits": "percent",
+                "timebase": "monotonic-since-page-creation; approximate-video-seconds",
+                "eventsPath": os.path.abspath(ev_path),
+                "screenshots": screenshots}
+    with open(os.path.splitext(out)[0] + ".capture.json", "w") as handle:
+        json.dump(metadata, handle, indent=2)
     if not quiet:
         print("captured ->", out, f"({len(events)} events -> {os.path.basename(ev_path)})")
     return out
@@ -254,9 +320,12 @@ def main():
     ap.add_argument("--url", required=True)
     ap.add_argument("--steps", default="", help="path to a steps JSON (see module docstring)")
     ap.add_argument("--out", default="raw.webm")
+    ap.add_argument("--capture-scale", type=int, choices=(1, 2, 3, 4), default=None,
+                    help="retain device pixels at 1–4x; CSS viewport and event percentages stay unchanged")
+    ap.add_argument("--no-cursor", action="store_true")
     args = ap.parse_args()
     steps = json.load(open(args.steps)) if args.steps else [{"scroll_to": H * 2, "steps": 40, "pause": 45}]
-    run(args.url, steps, args.out)
+    run(args.url, steps, args.out, capture_scale=args.capture_scale, cursor=not args.no_cursor)
 
 
 if __name__ == "__main__":

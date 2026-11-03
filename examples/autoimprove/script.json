@@ -1,0 +1,73 @@
+{
+  "fps": 30,
+  "music": "minimal electronic underscore, soft ticking pulse like a metronome, quiet synth pad, patient and precise, slowly building confidence, one gentle lift near the end, no drums until the lift, no vocals",
+  "musicVolume": 0.09,
+  "gemini_voice": "Charon",
+  "tts_direction": "like a founder narrating his own demo: confident, dry, quick, plain, no salesmanship",
+  "shots": [
+    {
+      "n": 1,
+      "kind": "clip",
+      "src": "term_climb.mp4",
+      "inSec": 2.2,
+      "durSec": 7.4,
+      "startScale": 1.05,
+      "endScale": 1.15,
+      "focusY": 32,
+      "accent": "data_tick",
+      "accentAtSec": 2.0,
+      "vo": "auto-improve points at any text file and makes it measurably better. This is a real run, climbing."
+    },
+    {
+      "n": 2,
+      "kind": "title",
+      "title": "confident is not the same as better",
+      "durSec": 3.4,
+      "vo": "A one-shot rewrite is confident. That is not the same as better."
+    },
+    {
+      "n": 3,
+      "kind": "clip",
+      "src": "term_gate.mp4",
+      "inSec": 1.4,
+      "durSec": 7.0,
+      "startScale": 1.05,
+      "endScale": 1.16,
+      "focusY": 40,
+      "accent": "click",
+      "accentAtSec": 3.4,
+      "vo": "So a separate judge grades every candidate, and each faces the champion twice, shuffled. Wins are kept; the rest reverted."
+    },
+    {
+      "n": 4,
+      "kind": "score",
+      "score": 84,
+      "scoreMax": 100,
+      "durSec": 3.6,
+      "flash": true,
+      "accent": "success_chime",
+      "title": "this video's own skill doc, after one run: 68 \u2192 84",
+      "vo": "Today it rewrote the skill doc that produced this video. Sixty-eight to eighty-four."
+    },
+    {
+      "n": 5,
+      "kind": "clip",
+      "src": "web_gh.mp4",
+      "inSec": 1.6,
+      "durSec": 6.2,
+      "startScale": 1.04,
+      "endScale": 1.14,
+      "focusY": 35,
+      "accent": "data_tick",
+      "accentAtSec": 1.0,
+      "vo": "Every kept edit is a git commit, so the history is the proof. Works on emails, prompts, docs, configs."
+    },
+    {
+      "n": 6,
+      "kind": "cta",
+      "title": "every commit a verified gain",
+      "durSec": 2.4,
+      "vo": "auto-improve. Open source. Point it at your file."
+    }
+  ]
+}

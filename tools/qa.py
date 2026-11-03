@@ -21,6 +21,8 @@ from typing import Any
 
 from contracts import narration_cut_conflicts, sha256_file
 
+NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
+
 
 def run(command: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     proc = subprocess.run(command, capture_output=True, text=True)
@@ -35,7 +37,7 @@ def ffprobe(video: str) -> dict[str, Any]:
         "-show_entries",
         "format=duration,size,bit_rate:stream=index,codec_type,codec_name,profile,width,height,"
         "pix_fmt,color_range,color_space,color_transfer,color_primaries,r_frame_rate,avg_frame_rate,"
-        "nb_frames,nb_read_frames,sample_rate,channels,channel_layout",
+        "nb_frames,nb_read_frames,sample_rate,channels,channel_layout,start_time,duration",
         "-of", "json", video,
     ])
     return json.loads(proc.stdout)
@@ -43,16 +45,16 @@ def ffprobe(video: str) -> dict[str, Any]:
 
 def parse_black(text: str) -> list[dict[str, float]]:
     out = []
-    for match in re.finditer(r"black_start:([0-9.]+)\s+black_end:([0-9.]+)\s+black_duration:([0-9.]+)", text):
+    for match in re.finditer(rf"black_start:({NUMBER})\s+black_end:({NUMBER})\s+black_duration:({NUMBER})", text):
         out.append({"startSec": float(match.group(1)), "endSec": float(match.group(2)),
                     "durationSec": float(match.group(3))})
     return out
 
 
 def parse_silence(text: str) -> list[dict[str, float]]:
-    starts = [float(x) for x in re.findall(r"silence_start:\s*([0-9.]+)", text)]
+    starts = [float(x) for x in re.findall(rf"silence_start:\s*({NUMBER})", text)]
     ends = [(float(a), float(b)) for a, b in re.findall(
-        r"silence_end:\s*([0-9.]+)\s*\|\s*silence_duration:\s*([0-9.]+)", text)]
+        rf"silence_end:\s*({NUMBER})\s*\|\s*silence_duration:\s*({NUMBER})", text)]
     return [{"startSec": starts[i] if i < len(starts) else max(0.0, end - dur),
              "endSec": end, "durationSec": dur} for i, (end, dur) in enumerate(ends)]
 
@@ -67,6 +69,71 @@ def parse_loudness(text: str) -> dict[str, float | None]:
         "loudnessRangeLu": last(r"LRA:\s*([0-9.]+)\s*LU"),
         "truePeakDbtp": last(r"Peak:\s*(-?[0-9.]+)\s*dBFS"),
     }
+
+
+def analyze_media(video: str, black_min: float, silence_db: float,
+                  silence_min: float) -> subprocess.CompletedProcess[str]:
+    """Decode and measure the exact delivery streams once; any filter/decode error fails QA."""
+    return run([
+        "ffmpeg", "-hide_banner", "-nostats", "-xerror", "-i", video,
+        "-map", "0:v:0", "-map", "0:a:0",
+        "-vf", f"blackdetect=d={black_min:g}:pic_th=0.98:pix_th=0.10",
+        "-af", f"silencedetect=n={silence_db:g}dB:d={silence_min:g},ebur128=peak=true",
+        "-f", "null", "-",
+    ], check=False)
+
+
+def analysis_issues(proc: subprocess.CompletedProcess[str],
+                    loudness: dict[str, float | None]) -> list[dict[str, Any]]:
+    if proc.returncode != 0:
+        return [{"code": "MEDIA_ANALYSIS_FAILED", "severity": "error",
+                 "message": f"decode/audio/black analysis failed ({proc.returncode}): {proc.stderr[-1600:]}"}]
+    missing = [key for key, value in loudness.items()
+               if value is None or not math.isfinite(value)]
+    if missing:
+        return [{"code": "LOUDNESS_MEASUREMENT_MISSING", "severity": "error",
+                 "message": f"could not measure: {', '.join(missing)}"}]
+    return []
+
+
+def audio_coverage_gaps(audio_stream: dict[str, Any], picture_duration: float,
+                        fps: float) -> list[dict[str, float]]:
+    """silencedetect cannot see silence after an audio stream ends or before it begins."""
+    if not audio_stream or audio_stream.get("duration") in (None, "N/A"):
+        return []
+    start = float(audio_stream.get("start_time") or 0)
+    end = start + float(audio_stream["duration"])
+    tolerance = container_duration_tolerance(fps)
+    gaps = []
+    if start > tolerance:
+        gaps.append({"startSec": 0.0, "endSec": min(start, picture_duration),
+                     "durationSec": min(start, picture_duration)})
+    if picture_duration - end > tolerance:
+        end = max(0.0, end)
+        gaps.append({"startSec": end, "endSec": picture_duration,
+                     "durationSec": picture_duration - end})
+    return gaps
+
+
+def loudness_issues(loudness: dict[str, float | None],
+                    contract: dict[str, Any]) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    try:
+        target = float(contract["targetLufs"]) if contract.get("targetLufs") is not None else None
+        peak = float(contract["maxTruePeakDbtp"]) if contract.get("maxTruePeakDbtp") is not None else None
+        tolerance = float(contract.get("lufsTolerance", 1.0))
+        if any(not math.isfinite(value) for value in (target, peak, tolerance) if value is not None) or tolerance < 0:
+            raise ValueError("targets must be finite and tolerance non-negative")
+    except (ValueError, TypeError) as exc:
+        return [{"code": "QA_LOUDNESS_CONFIG_INVALID", "severity": "error", "message": str(exc)}]
+    measured_i, measured_peak = loudness.get("integratedLufs"), loudness.get("truePeakDbtp")
+    if target is not None and measured_i is not None and abs(measured_i - target) > tolerance:
+        issues.append({"code": "LOUDNESS_OUT_OF_RANGE", "severity": "error",
+                       "message": f"measured {measured_i} LUFS; target {target} ± {tolerance}"})
+    if peak is not None and measured_peak is not None and measured_peak > peak:
+        issues.append({"code": "TRUE_PEAK_HIGH", "severity": "error",
+                       "message": f"measured {measured_peak} dBTP; maximum {peak}"})
+    return issues
 
 
 def _fraction(value: str | None) -> float | None:
@@ -185,8 +252,14 @@ def _safe_id(value: str) -> str:
 
 
 def _ffmpeg_image(video: str, vf: str, out: str, frames: int = 1) -> None:
-    run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", video,
+    # A successful FFmpeg exit does not imply it emitted a frame (e.g. an empty trim).
+    # Clear only the named generated file so a previous run cannot mask missing evidence.
+    if os.path.isfile(out):
+        os.unlink(out)
+    run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", video, "-map", "0:v:0",
          "-vf", vf, "-frames:v", str(frames), out])
+    if not os.path.isfile(out) or not os.path.getsize(out):
+        raise RuntimeError(f"visual QA produced no image: {out}")
 
 
 def generate_visuals(video: str, out_dir: str, duration: float, fps: float,
@@ -196,18 +269,21 @@ def generate_visuals(video: str, out_dir: str, duration: float, fps: float,
     samples = max(1, math.ceil(duration / every))
     rows = math.ceil(samples / 5)
     path = os.path.join(out_dir, "every-5s.png")
-    _ffmpeg_image(video, f"fps=1/{every:g},scale=384:216:flags=lanczos,tile=5x{rows}:nb_frames={samples}", path)
+    step = max(1, round(every * fps))
+    _ffmpeg_image(video, f"select='not(mod(n\\,{step}))',scale=384:216:flags=lanczos,"
+                  f"tile=5x{rows}:nb_frames={samples}", path)
     visuals["every5Seconds"] = path
 
-    intro_samples = 24
     path = os.path.join(out_dir, "opening.png")
-    _ffmpeg_image(video, "trim=start=0:end=16,setpts=PTS-STARTPTS,fps=3/2,"
+    _ffmpeg_image(video, f"trim=start=0:end=16,setpts=PTS-STARTPTS,"
+                  f"select='not(mod(n\\,{max(1, round(fps / 1.5))}))',"
                   "scale=384:216:flags=lanczos,tile=5x5:nb_frames=24", path)
     visuals["opening"] = path
 
     final_start = max(0.0, duration - 32.0)
     path = os.path.join(out_dir, "ending.png")
-    _ffmpeg_image(video, f"trim=start={final_start:.6f},setpts=PTS-STARTPTS,fps=1/2,"
+    _ffmpeg_image(video, f"trim=start={final_start:.6f},setpts=PTS-STARTPTS,"
+                  f"select='not(mod(n\\,{max(1, round(fps * 2))}))',"
                   "scale=384:216:flags=lanczos,tile=5x4:nb_frames=20", path)
     visuals["ending"] = path
 
@@ -226,33 +302,48 @@ def generate_visuals(video: str, out_dir: str, duration: float, fps: float,
         visuals["cutBoundaries"] = path
 
     risk_outputs = []
+    risk_ids: set[str] = set()
     for i, item in enumerate(qa_contract.get("criticalRanges", []) or []):
         start = float(item.get("startSec", 0.0))
         end = float(item.get("endSec", start))
-        if end <= start:
-            continue
+        if (not math.isfinite(start) or not math.isfinite(end) or start < 0
+                or end <= start or start >= duration or end > duration + 1 / fps):
+            raise ValueError(f"critical range {i + 1} is outside the video: {start:g}–{end:g}s")
+        end = min(duration, end)
         rid = _safe_id(str(item.get("id") or f"range-{i + 1}"))
+        if rid in risk_ids:
+            raise ValueError(f"critical range IDs collide after filename sanitization: {rid}")
+        risk_ids.add(rid)
         if item.get("everyFrame"):
             start_frame = max(0, round(start * fps))
             end_frame = min(round(duration * fps), round(end * fps))
-            count = max(1, end_frame - start_frame)
+            count = end_frame - start_frame
+            if count <= 0:
+                raise ValueError(f"critical range {rid} contains no picture frames")
             pages = math.ceil(count / 15)
             pattern = os.path.join(out_dir, f"critical-{rid}-%02d.png")
+            files = [pattern.replace("%02d", f"{n:02d}") for n in range(1, pages + 1)]
+            for path in files:
+                if os.path.isfile(path):
+                    os.unlink(path)
             run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", video,
+                 "-map", "0:v:0",
                  "-vf", f"trim=start_frame={start_frame}:end_frame={end_frame},setpts=PTS-STARTPTS,"
                         "scale=384:216:flags=lanczos,tile=5x3:nb_frames=15",
-                 "-vsync", "0", "-frames:v", str(pages), pattern])
-            files = [pattern.replace("%02d", f"{n:02d}") for n in range(1, pages + 1)]
+                 "-fps_mode", "passthrough", "-frames:v", str(pages), pattern])
+            if any(not os.path.isfile(path) or not os.path.getsize(path) for path in files):
+                raise RuntimeError(f"visual QA did not produce every page for critical range {rid}")
             risk_outputs.append({"id": rid, "startSec": start, "endSec": end,
                                  "frames": count, "files": files,
                                  "checks": item.get("checks", [])})
         else:
-            rate = max(1.0, float(item.get("sampleFps", 5.0)))
+            rate = min(fps, max(1.0, float(item.get("sampleFps", 5.0))))
             count = max(1, math.ceil((end - start) * rate))
             rows = math.ceil(count / 5)
             path = os.path.join(out_dir, f"critical-{rid}.png")
             _ffmpeg_image(video, f"trim=start={start:.6f}:end={end:.6f},setpts=PTS-STARTPTS,"
-                          f"fps={rate:g},scale=384:216:flags=lanczos,tile=5x{rows}:nb_frames={count}", path)
+                          f"select='not(mod(n\\,{max(1, round(fps / rate))}))',"
+                          f"scale=384:216:flags=lanczos,tile=5x{rows}:nb_frames={count}", path)
             risk_outputs.append({"id": rid, "startSec": start, "endSec": end,
                                  "framesSampled": count, "files": [path],
                                  "checks": item.get("checks", [])})
@@ -376,43 +467,30 @@ def main() -> None:
                 issues.append({"code": f"{contract_key.upper()}_MISMATCH", "severity": "error",
                                "message": f"expected {contract_key}={wanted}; decoded {observed_value}"})
 
-    decode = run(["ffmpeg", "-v", "error", "-i", video, "-map", "0:v:0", "-map", "0:a:0", "-f", "null", "-"], check=False)
-    if decode.returncode != 0:
-        issues.append({"code": "DECODE_FAILED", "severity": "error", "message": decode.stderr[-1000:]})
     black_min = float(qa_contract.get("blackMinSec", 0.1))
-    black_proc = run(["ffmpeg", "-hide_banner", "-nostats", "-i", video, "-vf",
-                      f"blackdetect=d={black_min}:pic_th=0.98:pix_th=0.10", "-an", "-f", "null", "-"], check=False)
-    black = parse_black(black_proc.stderr)
+    silence_db = float(qa_contract.get("silenceNoiseDb", -48.0))
+    silence_min = float(qa_contract.get("silenceMinSec", 0.7))
+    analysis = analyze_media(video, black_min, silence_db, silence_min)
+    loudness = parse_loudness(analysis.stderr)
+    issues.extend(analysis_issues(analysis, loudness))
+    black = parse_black(analysis.stderr)
     allowed_black = qa_contract.get("allowedBlackRanges", []) or []
     unintended_black = _outside_allowed(black, allowed_black)
     if unintended_black:
         issues.append({"code": "BLACK_INTERVALS", "severity": "error",
                        "message": f"{len(unintended_black)} unintended black interval(s) detected",
                        "intervals": unintended_black})
-    silence_db = float(qa_contract.get("silenceNoiseDb", -48.0))
-    silence_min = float(qa_contract.get("silenceMinSec", 0.7))
-    silence_proc = run(["ffmpeg", "-hide_banner", "-nostats", "-i", video, "-af",
-                        f"silencedetect=n={silence_db:g}dB:d={silence_min:g}", "-vn", "-f", "null", "-"], check=False)
-    silence = parse_silence(silence_proc.stderr)
+    silence = parse_silence(analysis.stderr)
+    coverage_gaps = audio_coverage_gaps(
+        audio_stream, frames / measured_fps if measured_fps and frames else duration,
+        measured_fps or 30.0,
+    )
     allowed_silence = qa_contract.get("allowedSilenceRanges", []) or []
-    unintended = _outside_allowed(silence, allowed_silence)
+    unintended = _outside_allowed(silence + coverage_gaps, allowed_silence)
     if unintended:
         issues.append({"code": "UNINTENDED_SILENCE", "severity": "error",
                        "message": f"{len(unintended)} unintended silence interval(s)", "intervals": unintended})
-    loud_proc = run(["ffmpeg", "-hide_banner", "-nostats", "-i", video, "-filter_complex",
-                     "ebur128=peak=true", "-f", "null", "-"], check=False)
-    loudness = parse_loudness(loud_proc.stderr)
-    target_lufs = qa_contract.get("targetLufs")
-    if target_lufs is not None and loudness["integratedLufs"] is not None:
-        tolerance = float(qa_contract.get("lufsTolerance", 1.0))
-        if abs(float(loudness["integratedLufs"]) - float(target_lufs)) > tolerance:
-            issues.append({"code": "LOUDNESS_OUT_OF_RANGE", "severity": "error",
-                           "message": f"measured {loudness['integratedLufs']} LUFS; target {target_lufs} ± {tolerance}"})
-    max_peak = qa_contract.get("maxTruePeakDbtp")
-    if max_peak is not None and loudness["truePeakDbtp"] is not None:
-        if float(loudness["truePeakDbtp"]) > float(max_peak):
-            issues.append({"code": "TRUE_PEAK_HIGH", "severity": "error",
-                           "message": f"measured {loudness['truePeakDbtp']} dBTP; maximum {max_peak}"})
+    issues.extend(loudness_issues(loudness, qa_contract))
 
     narration_continuity: dict[str, Any] = {}
     policy = str(production.get("narrationCutPolicy", "") or "")
@@ -449,8 +527,12 @@ def main() -> None:
             "pictureTailAfterLastCueSec": round(duration - last_cue_end, 6),
         }
 
-    visuals = {} if args.no_visuals else generate_visuals(video, out_dir, duration, measured_fps or 30.0,
-                                                           props, qa_contract)
+    visuals = {}
+    if not args.no_visuals:
+        try:
+            visuals = generate_visuals(video, out_dir, duration, measured_fps or 30.0, props, qa_contract)
+        except (RuntimeError, ValueError) as exc:
+            issues.append({"code": "VISUAL_QA_FAILED", "severity": "error", "message": str(exc)})
     report = {
         "schemaVersion": 1,
         "status": "pass" if not any(i["severity"] == "error" for i in issues) else "fail",
@@ -461,11 +543,12 @@ def main() -> None:
                   "video": video_stream, "audio": audio_stream},
         "audio": {**loudness, "silenceThresholdDb": silence_db,
                   "silenceMinSec": silence_min, "detectedSilence": silence,
+                  "coverageGaps": coverage_gaps,
                   "unintendedSilence": unintended},
         "narrationContinuity": narration_continuity,
         "blackIntervals": black,
         "unintendedBlackIntervals": unintended_black,
-        "fullDecode": "pass" if decode.returncode == 0 else "fail",
+        "fullDecode": "pass" if analysis.returncode == 0 else "fail",
         "issues": issues,
         "visualQa": visuals,
     }

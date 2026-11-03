@@ -1,10 +1,16 @@
 import {
-  AbsoluteFill, Sequence, Audio, OffthreadVideo, staticFile,
+  AbsoluteFill, Sequence, Audio, OffthreadVideo, Freeze, Img, staticFile,
   useCurrentFrame, useVideoConfig, interpolate, spring, Easing,
 } from 'remotion';
 import { loadFont as loadInter } from '@remotion/google-fonts/Inter';
 import { loadFont as loadIBMPlexSans } from '@remotion/google-fonts/IBMPlexSans';
 import React from 'react';
+import { baseClipTransform, captionCharacterBudget, musicGain, sourceFocus, sourcePlane, speechWindows, timelineLayout, type Narration, type PercentRect, type SourceDetail } from './render-math';
+import { StudioCard, StudioStage, StudioAnnotations, type StudioSegment, type StudioAnnotation } from './Studio';
+import { cameraTransform, transitionProgress, transitionStyle, type CameraKeyframe } from './studio-motion';
+import { SourceVideo, type SourceSpan } from './SourceVideo';
+import { StudioDetailCaption, StudioDetailPlate } from './StudioDetailPlate';
+import { StudioEvidenceExcerpt, type EvidenceExcerpt } from './StudioEvidenceExcerpt';
 
 // Load only the Latin weights the engine paints. This keeps renders deterministic without
 // issuing hundreds of font requests for unused scripts, italics, and weight variants.
@@ -24,14 +30,27 @@ export type Segment = {
   kind: 'clip' | 'split' | 'title' | 'stat' | 'cta' | 'score' | 'strip' | 'bars';
   durSec: number;
   durFrames?: number;           // build-plan v2: canonical integer duration
-  transition?: 'cut' | 'xfade'; // optional incoming transition override
+  transition?: 'cut' | 'xfade' | 'reveal' | 'push';
+  transitionSec?: number;
+  studio?: boolean;
+  direction?: StudioSegment['direction'];
+  camera?: CameraKeyframe[];
+  annotations?: StudioAnnotation[];
+  titleLines?: string[]; emphasis?: string;
+  evidenceExcerpt?: EvidenceExcerpt;
+  soundCues?: {atSec: number; sound: string; volume?: number}[];
   storyBeat?: string; storyBeats?: string[]; continuityId?: string; stateId?: string; transitionReason?: string;
   sourceType?: 'product' | 'human' | 'slide' | 'external' | 'generated'; liveState?: boolean;
+  visualTreatment?: 'presentation' | 'recording' | 'replay'; replayProvenance?: string;
   actor?: 'agent' | 'human' | 'system'; actionRisk?: 'low-friction' | 'consequential';
   claimIds?: string[]; preserveFraming?: boolean; editorialIntent?: string;
   chapter?: 'BEFORE' | 'AFTER' | '';
   showChapter?: boolean;        // chapter pills render ONLY when explicitly requested
   src?: string; inSec?: number; scale?: number; flash?: boolean; sound?: boolean;
+  sourcePlan?: SourceSpan[];
+  sourceDetail?: SourceDetail;
+  sourceWindow?: PercentRect;  // isolate an inspected complete source module before the camera transform
+  sourceWidth?: number; sourceHeight?: number; // oriented source display dimensions, including sample aspect ratio
   startScale?: number; endScale?: number; focusX?: number; focusY?: number; panX?: number; panY?: number;
   objectFit?: 'cover' | 'contain'; vignette?: boolean;
   zooms?: ZoomSpec[];           // zoom regions with spring-chase (build.py derives one from click* too)
@@ -39,7 +58,8 @@ export type Segment = {
   srcL?: string; inL?: number; srcR?: string; inR?: number; labelL?: string; labelR?: string;
   title?: string; eyebrow?: string; subtitle?: string; score?: number; scoreMax?: number;
   takes?: number[]; passLine?: number; takeLabels?: string[];   // bars: real take scores + pass bar
-  caption?: string; captionStyle?: 'quote' | 'label';
+  caption?: string; captionStyle?: 'quote' | 'label' | 'readout';
+  captionFontSize?: number;     // output pixels; author for the intended viewing size
   captionTop?: number; captionBottom?: number;
   voSec?: number;               // spoken length of the VO file; caption chunks spread over it
   brand?: string; brandAccent?: string;   // CTA wordmark: brand + accent-colored tail (e.g. "Demo" + "Director")
@@ -91,12 +111,12 @@ function hexA(hex: string, a: number): string {
 export type TimelineProps = {
   fps: number; totalSec: number; totalFrames?: number; buildId?: string; profile?: string | null;
   music?: string | null; musicVolume?: number; musicFadeOutSec?: number; sfx?: Sfx;
-  narration?: { src: string; startAtSec?: number; durationSec?: number; volume?: number } | null;
+  narration?: Narration | null;
   segments: Segment[]; theme?: Partial<Theme>;
 };
 
-// module-level, mutable: set as the FIRST statement of <Timeline> each render, before any child paints.
-let THEME: Theme = DEFAULT_THEME;
+// Each composition owns its theme; concurrent previews cannot overwrite a module-global palette.
+const ThemeContext = React.createContext<Theme>(DEFAULT_THEME);
 
 /* ================================================================================================
  * Zoom system — adapted from OpenScreen (siddharthvaddem/openscreen, videoPlayback/),
@@ -256,7 +276,7 @@ function computeZoomTrajectory(zooms: ZoomSpec[] | undefined, durF: number, fps:
     .filter((z) => z && Number.isFinite(z.atSec) && Number.isFinite(z.durSec) && z.durSec > 0)
     .map((z) => ({
       startMs: z.atSec * 1000, endMs: (z.atSec + z.durSec) * 1000,
-      scale: Math.max(1.05, z.scale ?? 1.6),
+      scale: Math.max(1, z.scale ?? 1.6),
       cx: (z.focusX ?? 50) / 100, cy: (z.focusY ?? 50) / 100,
     }))
     .sort((a, b) => a.startMs - b.startMs);
@@ -273,30 +293,27 @@ function computeZoomTrajectory(zooms: ZoomSpec[] | undefined, durF: number, fps:
 
 // ---- clip: base scale 1.0 (NO default push-in). Zoom happens only inside authored/derived
 // zoom regions. Explicit startScale/endScale ken-burns is still honored, clamped >= 1.0. ----
-const ClipView: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
-  const { fps, width: W, height: H } = useVideoConfig();
+const CameraClipView: React.FC<{ seg: Segment; durF: number; silent?: boolean }> = ({ seg, durF, silent }) => {
+  const THEME = React.useContext(ThemeContext);
+  const { fps, width, height } = useVideoConfig();
+  const staged = seg.studio && seg.direction?.layout === 'stage' && !seg.preserveFraming;
+  const W = staged ? 1920 : width, H = staged ? 1080 : height;
   const f = useCurrentFrame();
+  const objectFit = seg.preserveFraming ? 'contain' : seg.objectFit ?? 'cover';
+  const plane = React.useMemo(
+    () => sourcePlane(seg.sourceWidth, seg.sourceHeight, W, H, objectFit),
+    [seg.sourceWidth, seg.sourceHeight, W, H, objectFit],
+  );
+  const projectedCamera = React.useMemo(
+    () => seg.camera?.map((point) => ({ ...point, ...sourceFocus(plane, W, H, point.focusX, point.focusY) })),
+    [seg.camera, plane, W, H],
+  );
   const traj = React.useMemo(
-    () => computeZoomTrajectory(seg.zooms, durF, fps, W, H),
-    [seg, durF, fps, W, H],
+    () => computeZoomTrajectory(seg.preserveFraming || seg.camera?.length ? undefined : seg.zooms, durF, fps, W, H),
+    [seg.zooms, seg.camera, seg.preserveFraming, durF, fps, W, H],
   );
   const z = traj ? traj[Math.min(Math.max(f, 0), durF)] : null;
-  // legacy explicit ken-burns: honored only when authored, never below 1.0
-  let k = 1, bx = 0, by = 0;
-  if (seg.startScale != null || seg.endScale != null) {
-    const s0 = Math.max(1, seg.startScale ?? 1);
-    const s1 = Math.max(1, seg.endScale ?? s0);
-    k = interpolate(f, [0, durF], [s0, s1], { extrapolateRight: 'clamp', easing: Easing.inOut(Easing.quad) });
-    bx = (W * (1 - k)) / 2;
-    by = (H * (1 - k)) / 2;
-  }
-  if (seg.panX != null || seg.panY != null) {
-    const tx = interpolate(f, [0, durF], [seg.panX ?? 0, (seg.panX ?? 0) * 0.45], { extrapolateRight: 'clamp' });
-    const py = seg.panY ?? 0;
-    const ty = interpolate(f, [0, durF], [py, -py], { extrapolateRight: 'clamp' });
-    bx += (tx / 100) * W;
-    by += (ty / 100) * H;
-  }
+  const { s: k, x: bx, y: by } = baseClipTransform(seg, f, durF, W, H);
   const zs = z?.s ?? 1, zx = z?.x ?? 0, zy = z?.y ?? 0;
   // compose base ken-burns then region zoom (top-left-origin affine): p -> zs*(k*p + b) + zt
   let S = Math.max(1, k * zs);
@@ -305,18 +322,46 @@ const ClipView: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
   // hard guarantee: the viewport never exposes outside the source frame (the "cut sidebar" fix)
   X = Math.min(0, Math.max(W * (1 - S), X));
   Y = Math.min(0, Math.max(H * (1 - S), Y));
+  if (!seg.preserveFraming && projectedCamera?.length) {
+    const camera = cameraTransform(projectedCamera, f, fps, W, H, plane);
+    S = camera.s; X = camera.x; Y = camera.y;
+  }
   return (
-    <AbsoluteFill style={{ background: '#000', overflow: 'hidden' }}>
+    <StudioStage theme={THEME} durF={durF} enabled={!!staged} energy={seg.direction?.energy}>
+    <AbsoluteFill style={{ background: seg.sourceWindow ? THEME.bg : '#000', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', width: W, height: H,
+        transform: `translate3d(${X}px, ${Y}px, 0) scale(${S})`, transformOrigin: '0 0' }}>
       {/* sound: a UGC talking-head plays its own audio (the creator's voice); screen clips stay muted */}
-      <OffthreadVideo src={staticFile(seg.src!)} startFrom={Math.round((seg.inSec ?? 0) * fps)} muted={!seg.sound}
-        style={{ position: 'absolute', left: 0, top: 0, width: W, height: H, objectFit: seg.objectFit ?? 'cover',
-          transform: `translate(${X}px, ${Y}px) scale(${S})`, transformOrigin: '0 0' }} />
+      {/* Paint the complete fitted source, not a pre-cropped video element. This
+          lets the camera reach source edges outside the initial cover viewport. */}
+      <div style={{ position: 'absolute', left: plane.left, top: plane.top, width: plane.width, height: plane.height }}>
+      {/* Only native media is isolated. Editorial annotation labels may sit outside their source rectangle. */}
+      <div style={{ position: 'absolute', inset: 0,
+        clipPath: seg.sourceWindow ? `inset(${Math.max(0, seg.sourceWindow.y)}% ${Math.max(0, 100 - seg.sourceWindow.x - seg.sourceWindow.width)}% ${Math.max(0, 100 - seg.sourceWindow.y - seg.sourceWindow.height)}% ${Math.max(0, seg.sourceWindow.x)}%)` : undefined }}>
+      {seg.sourcePlan?.length ? <SourceVideo src={staticFile(seg.src!)} plan={seg.sourcePlan} muted={!!silent || !seg.sound}
+        style={{ position: 'absolute', left: 0, top: 0, width: plane.width, height: plane.height, objectFit: 'fill' }} />
+        : <OffthreadVideo src={staticFile(seg.src!)} startFrom={Math.round((seg.inSec ?? 0) * fps)} muted={silent || !seg.sound}
+          style={{ position: 'absolute', left: 0, top: 0, width: plane.width, height: plane.height, objectFit: 'fill' }} />}
+      </div>
+        <StudioAnnotations annotations={seg.annotations} width={plane.width} height={plane.height} fps={fps} frame={f} theme={THEME} />
+      </div>
+      </div>
       {seg.vignette === true && <AbsoluteFill style={{ boxShadow: 'inset 0 0 220px rgba(0,0,0,0.34)', pointerEvents: 'none' }} />}
     </AbsoluteFill>
+    </StudioStage>
   );
 };
 
-const SplitView: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
+const ClipView: React.FC<{ seg: Segment; durF: number; silent?: boolean }> = ({ seg, durF, silent }) => {
+  const theme = React.useContext(ThemeContext);
+  if (seg.sourceDetail) return <StudioDetailPlate src={seg.src!} sourceWidth={seg.sourceWidth}
+    sourceHeight={seg.sourceHeight} detail={seg.sourceDetail} sourcePlan={seg.sourcePlan}
+    inSec={seg.inSec} muted={!!silent || !seg.sound} durF={durF} title={seg.title} theme={theme} />;
+  return <CameraClipView seg={seg} durF={durF} silent={silent} />;
+};
+
+const SplitView: React.FC<{ seg: Segment }> = ({ seg }) => {
+  const THEME = React.useContext(ThemeContext);
   const { fps } = useVideoConfig();
   const f = useCurrentFrame();
   // the "directed" side wipes in from the divider — a literal before->after *change* in the first beat
@@ -342,6 +387,7 @@ const SplitView: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
 };
 
 const ChapterPill: React.FC<{ label?: string }> = ({ label }) => {
+  const THEME = React.useContext(ThemeContext);
   const f = useCurrentFrame();
   const { fps } = useVideoConfig();
   if (!label) return null;
@@ -359,7 +405,8 @@ const ChapterPill: React.FC<{ label?: string }> = ({ label }) => {
 };
 
 // ---- single-line captions: the text auto-chunks at clause boundaries into <=~46-char pieces,
-// each shown for its proportional share of the VO window. Never wraps to two rows. ----
+// each shown for its proportional share of the VO window. Large opt-in labels
+// use a width-aware budget and may wrap unusually wide words rather than crop. ----
 const CAPTION_MAX_CHARS = 46;
 export function chunkCaption(text: string, maxLen = CAPTION_MAX_CHARS): string[] {
   const clean = (text || '').replace(/\s+/g, ' ').trim();
@@ -391,12 +438,25 @@ export function chunkCaption(text: string, maxLen = CAPTION_MAX_CHARS): string[]
 }
 
 const Caption: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
+  const theme = React.useContext(ThemeContext);
+  if (seg.sourceDetail && seg.caption?.trim()) return <StudioDetailCaption text={seg.caption}
+    detail={seg.sourceDetail} theme={theme} durF={durF} voSec={seg.voSec}
+    fontSize={seg.captionFontSize} top={seg.captionTop} bottom={seg.captionBottom}
+    quote={seg.captionStyle === 'quote'} readout={seg.captionStyle === 'readout'} />;
+  return <LegacyCaption seg={seg} durF={durF} />;
+};
+
+const LegacyCaption: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
+  const THEME = React.useContext(ThemeContext);
   const f = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width } = useVideoConfig();
   const text = seg.caption ?? '';
-  const chunks = React.useMemo(() => chunkCaption(text), [text]);
-  if (chunks.length === 0) return null;
   const quote = seg.captionStyle === 'quote';
+  const fontSize = typeof seg.captionFontSize === 'number' && Number.isFinite(seg.captionFontSize)
+    && seg.captionFontSize > 0 ? seg.captionFontSize : quote ? 25 : 23;
+  const budget = captionCharacterBudget(width, fontSize);
+  const chunks = React.useMemo(() => chunkCaption(text, budget), [text, budget]);
+  if (chunks.length === 0) return null;
   // chunks spread across the VO window (falls back to the whole shot when no VO length known)
   const winF = Math.max(1, Math.min(durF, seg.voSec ? Math.round((seg.voSec + 0.35) * fps) : durF));
   const totalLen = chunks.reduce((a, c) => a + c.length, 0);
@@ -418,8 +478,9 @@ const Caption: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
       display: 'flex', justifyContent: 'center', opacity: Math.min(fadeIn, fadeOut) }}>
       <div style={{ background: 'rgba(12,14,16,0.55)', backdropFilter: 'blur(6px)', borderRadius: 10,
         padding: '10px 22px', color: 'rgba(255,255,255,0.96)', fontFamily: THEME.font,
-        fontSize: quote ? 25 : 23, lineHeight: 1.3, fontWeight: 500, letterSpacing: 0.2,
-        fontStyle: quote ? 'italic' : 'normal', whiteSpace: 'nowrap',
+        fontSize, lineHeight: 1.3, fontWeight: 500, letterSpacing: 0.2,
+        fontStyle: quote ? 'italic' : 'normal', whiteSpace: seg.captionFontSize ? 'normal' : 'nowrap',
+        maxWidth: '100%', boxSizing: 'border-box', overflowWrap: 'anywhere', textAlign: 'center',
         textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>
         {chunks[idx]}
       </div>
@@ -428,24 +489,24 @@ const Caption: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
 };
 
 const Card: React.FC<{ seg: Segment; durF: number; cta?: boolean }> = ({ seg, durF, cta }) => {
+  const THEME = React.useContext(ThemeContext);
   const f = useCurrentFrame();
   const { fps } = useVideoConfig();
   const drift = interpolate(f, [0, durF], [0, 1]);
   const s = spring({ frame: f, fps, config: { damping: 20, mass: 0.8 } });
-  const out = interpolate(f, [durF - Math.round(0.27 * fps), durF], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const words = (seg.title || '').split(' ');
   return (
     <AbsoluteFill style={{
       background: `radial-gradient(130% 130% at ${30 + drift * 12}% ${0 + drift * 10}%, ${THEME.grad} 0%, ${THEME.bg} 62%)`,
-      alignItems: 'center', justifyContent: 'center', fontFamily: THEME.font, padding: 130, opacity: out,
+      alignItems: 'center', justifyContent: 'center', fontFamily: THEME.font, padding: 130,
     }}>
       {cta && seg.eyebrow && <div style={{ marginBottom: 24, padding: '9px 17px', borderRadius: 999,
         border: `1px solid ${hexA(THEME.accent, 0.46)}`, background: hexA(THEME.accent, 0.10), color: THEME.accent,
         fontSize: 21, fontWeight: 800, letterSpacing: 3, lineHeight: 1, textTransform: 'uppercase',
-        opacity: Math.min(s, out), transform: `translateY(${interpolate(s, [0, 1], [12, 0])}px)` }}>
+        opacity: Math.min(s, 1), transform: `translateY(${interpolate(s, [0, 1], [12, 0])}px)` }}>
         {seg.eyebrow}</div>}
       {/* real brand logo (brand.json "logo") replaces the text wordmark on the CTA card */}
-      {cta && THEME.logo && <img src={staticFile(THEME.logo)} style={{ maxHeight: 120, maxWidth: 760,
+      {cta && THEME.logo && <Img src={staticFile(THEME.logo)} style={{ maxHeight: 120, maxWidth: 760,
         objectFit: 'contain', marginBottom: 30, opacity: s,
         transform: `scale(${interpolate(s, [0, 1], [0.86, 1])})` }} />}
       {cta && !THEME.logo && (seg.brand || seg.title) && <div style={{ fontSize: 70, fontWeight: 900, letterSpacing: 0.5, color: THEME.ink, marginBottom: 26,
@@ -454,7 +515,7 @@ const Card: React.FC<{ seg: Segment; durF: number; cta?: boolean }> = ({ seg, du
       {!cta && seg.eyebrow && <div style={{ marginBottom: 28, padding: '10px 18px', borderRadius: 999,
         border: `1px solid ${hexA(THEME.accent, 0.46)}`, background: hexA(THEME.accent, 0.10), color: THEME.accent,
         fontSize: 22, fontWeight: 800, letterSpacing: 3.2, lineHeight: 1, textTransform: 'uppercase',
-        opacity: Math.min(s, out), transform: `translateY(${interpolate(s, [0, 1], [12, 0])}px)` }}>
+        opacity: Math.min(s, 1), transform: `translateY(${interpolate(s, [0, 1], [12, 0])}px)` }}>
         {seg.eyebrow}</div>}
       <div style={{ color: THEME.ink, textAlign: 'center', fontSize: seg.kind === 'stat' ? 58 : 52, fontWeight: 800, lineHeight: 1.18, maxWidth: 1460 }}>
         {words.map((w, i) => {
@@ -465,10 +526,10 @@ const Card: React.FC<{ seg: Segment; durF: number; cta?: boolean }> = ({ seg, du
       </div>
       {cta && seg.subtitle && <div style={{ marginTop: 30, padding: '14px 30px', borderRadius: 999,
         border: `1.5px solid ${THEME.accent}`, background: hexA(THEME.accent, 0.12), color: THEME.accent, fontSize: 36, fontWeight: 750,
-        letterSpacing: 0.3, fontFamily: THEME.font, opacity: Math.min(s, out), transform: `translateY(${interpolate(s, [0, 1], [14, 0])}px)` }}>
+        letterSpacing: 0.3, fontFamily: THEME.font, opacity: Math.min(s, 1), transform: `translateY(${interpolate(s, [0, 1], [14, 0])}px)` }}>
         {seg.subtitle} →</div>}
       {!cta && seg.subtitle && <div style={{ marginTop: 34, maxWidth: 1320, color: THEME.sub, textAlign: 'center',
-        fontSize: 30, fontWeight: 600, lineHeight: 1.35, letterSpacing: 0.15, opacity: Math.min(s, out),
+        fontSize: 30, fontWeight: 600, lineHeight: 1.35, letterSpacing: 0.15, opacity: Math.min(s, 1),
         transform: `translateY(${interpolate(s, [0, 1], [16, 0])}px)` }}>
         {seg.subtitle}</div>}
     </AbsoluteFill>
@@ -477,28 +538,28 @@ const Card: React.FC<{ seg: Segment; durF: number; cta?: boolean }> = ({ seg, du
 
 // ---- the wow beat: a score that counts up while a bar fills, then a tick lands ----
 const ScoreCard: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
+  const THEME = React.useContext(ThemeContext);
   const f = useCurrentFrame();
   const { fps } = useVideoConfig();
   const target = seg.score ?? 72;
-  const max = seg.scoreMax ?? 100;
+  const max = Math.max(1, seg.scoreMax ?? 100);
   const s = spring({ frame: f, fps, config: { damping: 14, mass: 0.7 } });
   // count ticks up over the first ~60% of the beat and decelerates into the target — the motion IS the wow
   const countEnd = Math.max(Math.round(0.6 * durF), Math.round(0.8 * fps));
   const count = Math.round(interpolate(f, [Math.round(0.1 * fps), countEnd], [0, target], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) }));
   const fill = interpolate(f, [Math.round(0.1 * fps), countEnd], [0, target / max], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
   const tick = spring({ frame: f - countEnd - Math.round(0.07 * fps), fps, config: { damping: 12, mass: 0.5 } });
-  const out = interpolate(f, [durF - Math.round(0.27 * fps), durF], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const drift = interpolate(f, [0, durF], [0, 1]);
   return (
     <AbsoluteFill style={{
       background: `radial-gradient(130% 130% at ${30 + drift * 12}% ${drift * 10}%, ${THEME.grad} 0%, ${THEME.bg} 62%)`,
-      alignItems: 'center', justifyContent: 'center', fontFamily: THEME.font, opacity: out,
+      alignItems: 'center', justifyContent: 'center', fontFamily: THEME.font,
     }}>
       {seg.eyebrow && <div style={{
         position: 'absolute', top: 104, padding: '10px 18px', borderRadius: 999,
         border: `1px solid ${hexA(THEME.accent, 0.46)}`, background: hexA(THEME.accent, 0.10),
         color: THEME.accent, fontSize: 22, fontWeight: 800, letterSpacing: 3.2,
-        lineHeight: 1, textTransform: 'uppercase', opacity: Math.min(s, out),
+        lineHeight: 1, textTransform: 'uppercase', opacity: Math.min(s, 1),
         transform: `translateY(${interpolate(s, [0, 1], [12, 0])}px)`,
       }}>{seg.eyebrow}</div>}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'baseline', gap: 14 }}>
@@ -523,16 +584,16 @@ const ScoreCard: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
 
 // ---- the iterate beat: rejected cuts climb past a PASS line until one clears it ----
 const IterBars: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
+  const THEME = React.useContext(ThemeContext);
   const f = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const out = interpolate(f, [durF - Math.round(0.23 * fps), durF], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const drift = interpolate(f, [0, durF], [0, 1]);
   const H = 430;
   const LABEL_BAND = 56;
   const PLOT_H = H - LABEL_BAND;
   // real take scores flow in from the script (seg.takes / seg.passLine); defaults keep old cuts rendering
   const takes = seg.takes && seg.takes.length ? seg.takes : [46, 58, 67, 80];
-  const denom = Math.max(seg.scoreMax ?? 100, ...takes);
+  const denom = Math.max(1, seg.scoreMax ?? 100, seg.passLine ?? 74, ...takes);
   const heights = takes.map((t) => t / denom);
   const labels = seg.takeLabels && seg.takeLabels.length === takes.length
     ? seg.takeLabels : takes.map((_, i) => `take ${i + 1}`);
@@ -547,7 +608,7 @@ const IterBars: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
   return (
     <AbsoluteFill style={{
       background: `radial-gradient(130% 130% at ${30 + drift * 12}% ${drift * 10}%, ${THEME.grad} 0%, ${THEME.bg} 62%)`,
-      alignItems: 'center', justifyContent: 'center', fontFamily: THEME.font, opacity: out,
+      alignItems: 'center', justifyContent: 'center', fontFamily: THEME.font,
     }}>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 52, height: H, padding: '0 30px' }}>
         <div style={{ position: 'absolute', left: -28, right: -150, bottom: LABEL_BAND + pass * PLOT_H, borderTop: `2px dashed ${THEME.accent}`, opacity: 0.55 }} />
@@ -566,7 +627,7 @@ const IterBars: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
                 <div style={{ position: 'absolute', top: -38, left: 0, right: 0, textAlign: 'center', fontVariantNumeric: 'tabular-nums',
                   color: passed ? THEME.accent : THEME.sub, fontWeight: 800, fontSize: 26, opacity: s }}>{takes[i]}</div>
               </div>
-              <div style={{ marginTop: 16, color: passed ? THEME.accent : THEME.sub, fontWeight: 750, fontSize: 24 }}>{labels[i]}{passed ? ' ✓' : ''}</div>
+              <div style={{ height: LABEL_BAND, flexShrink: 0, paddingTop: 16, boxSizing: 'border-box', color: passed ? THEME.accent : THEME.sub, fontWeight: 750, fontSize: 24 }}>{labels[i]}{passed ? ' ✓' : ''}</div>
             </div>
           );
         })}
@@ -579,6 +640,7 @@ const IterBars: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
 // ---- the meta beat: a strip of the promo's own shots pans by ("it cut this video too") ----
 const STRIP_AR = 3984 / 302; // baked filmstrip aspect (8 tiles)
 const Filmstrip: React.FC<{ src: string; durF: number }> = ({ src, durF }) => {
+  const THEME = React.useContext(ThemeContext);
   const f = useCurrentFrame();
   const { width: W, height: H } = useVideoConfig();
   const p = interpolate(f, [0, durF], [0, 1], { extrapolateRight: 'clamp', easing: Easing.inOut(Easing.quad) });
@@ -588,7 +650,7 @@ const Filmstrip: React.FC<{ src: string; durF: number }> = ({ src, durF }) => {
   const tilt = interpolate(f, [0, durF], [1.5, -1.5]);
   return (
     <AbsoluteFill style={{ background: `radial-gradient(120% 120% at 50% 30%, ${THEME.gradFilm} 0%, ${THEME.bg} 70%)`, overflow: 'hidden' }}>
-      <img src={staticFile(src)} style={{
+      <Img src={staticFile(src)} style={{
         position: 'absolute', top: (H - stripH) / 2, left: 0, height: stripH, width: stripW,
         transform: `translateX(${x}px) rotate(${tilt * 0.18}deg)`, filter: 'saturate(1.06)',
         boxShadow: '0 36px 110px rgba(0,0,0,0.55)' }} />
@@ -597,10 +659,14 @@ const Filmstrip: React.FC<{ src: string; durF: number }> = ({ src, durF }) => {
   );
 };
 
-const Seg: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
+const Seg: React.FC<{ seg: Segment; durF: number; silent?: boolean }> = ({ seg, durF, silent }) => {
+  const THEME = React.useContext(ThemeContext);
   let body: React.ReactNode;
-  if (seg.kind === 'clip') body = <ClipView seg={seg} durF={durF} />;
-  else if (seg.kind === 'split') body = <SplitView seg={seg} durF={durF} />;
+  if (seg.evidenceExcerpt) body = <StudioEvidenceExcerpt excerpt={seg.evidenceExcerpt} theme={THEME} durF={durF}
+    align={seg.direction?.align} />;
+  else if (seg.kind === 'clip') body = <ClipView seg={seg} durF={durF} silent={silent} />;
+  else if (seg.studio && ['title', 'stat', 'cta', 'score'].includes(seg.kind)) body = <StudioCard seg={seg} theme={THEME} durF={durF} />;
+  else if (seg.kind === 'split') body = <SplitView seg={seg} />;
   else if (seg.kind === 'score') body = <ScoreCard seg={seg} durF={durF} />;
   else if (seg.kind === 'strip') body = <Filmstrip src={seg.src!} durF={durF} />;
   else if (seg.kind === 'bars') body = <IterBars seg={seg} durF={durF} />;
@@ -611,7 +677,7 @@ const Seg: React.FC<{ seg: Segment; durF: number }> = ({ seg, durF }) => {
       {/* chapter pills only on explicit request; the chapter FIELD still drives flash/riser timing */}
       {seg.showChapter === true && <ChapterPill label={seg.chapter} />}
       <Caption seg={seg} durF={durF} />
-      {seg.vo && <Audio src={staticFile(seg.vo)} />}
+      {!silent && seg.vo && <Audio src={staticFile(seg.vo)} />}
     </AbsoluteFill>
   );
 };
@@ -625,61 +691,70 @@ const PivotFlash: React.FC<{ pivotFrame: number }> = ({ pivotFrame }) => {
 };
 
 // incoming-shot crossfade wrapper: opacity only — no translate, no zoom on the incoming shot
-const SegFade: React.FC<{ fadeInF: number; children: React.ReactNode }> = ({ fadeInF, children }) => {
+const SegFade: React.FC<{ fadeInF: number; kind?: Segment['transition']; children: React.ReactNode }> = ({ fadeInF, kind, children }) => {
   const f = useCurrentFrame();
+  const { width, height } = useVideoConfig();
+  if (kind === 'reveal' || kind === 'push') return <AbsoluteFill style={transitionStyle(kind, transitionProgress(f, fadeInF), width, height)}>{children}</AbsoluteFill>;
   const o = fadeInF > 0 ? interpolate(f, [0, fadeInF], [0, 1], { extrapolateRight: 'clamp' }) : 1;
   return <AbsoluteFill style={{ opacity: o }}>{children}</AbsoluteFill>;
 };
 
-type TransKind = 'none' | 'cut' | 'xfade';
+const SegmentTrack: React.FC<{ seg: Segment; durF: number; fadeInF: number }> = ({ seg, durF, fadeInF }) => {
+  const frame = useCurrentFrame();
+  const holding = frame >= durF;
+  return <SegFade fadeInF={fadeInF} kind={seg.transition}>
+    {/* The transition borrows only a still of the outgoing last picture. Explicitly mute
+        its audio too: a frozen video must never repeat speech or play past the source trim. */}
+    <Freeze frame={durF - 1} active={holding}>
+      <Seg seg={seg} durF={durF} silent={holding} />
+    </Freeze>
+  </SegFade>;
+};
 
 export const Timeline: React.FC<TimelineProps> = ({ fps, music, musicVolume = 0.1, musicFadeOutSec = 1.5, narration, sfx, segments, theme }) => {
-  THEME = resolveTheme(theme);   // set module theme BEFORE any child paints this frame (see DEFAULT_THEME note)
-  const df = segments.map((s) => Math.max(1, s.durFrames ?? Math.round(s.durSec * fps)));
-  const starts: number[] = []; let acc = 0; for (const d of df) { starts.push(acc); acc += d; }
+  const THEME = React.useMemo(() => resolveTheme(theme), [theme]);
+  const { rows, totalFrames: acc } = React.useMemo(() => timelineLayout(segments, fps), [segments, fps]);
+  const starts = rows.map((row) => row.start);
+  const voWins = React.useMemo(() => speechWindows(segments, fps, narration), [segments, fps, narration]);
   const pivotIdx = segments.findIndex((s) => s.chapter === 'AFTER' || s.flash);
   const pivotFrame = pivotIdx > 0 ? starts[pivotIdx] : -999;
 
-  // scene transitions: same-src clip->clip = pure hard cut; flash beats = hard cut (+ white flash);
-  // everything else = 300ms opacity-only crossfade
-  const XF = Math.max(1, Math.round(0.3 * fps));
-  const transIn: TransKind[] = segments.map((seg, i) => {
-    if (i === 0) return 'none';
-    const prev = segments[i - 1];
-    if (seg.transition === 'cut' || seg.transition === 'xfade') return seg.transition;
-    if (seg.flash) return 'cut';
-    if (seg.kind === 'clip' && prev.kind === 'clip' && seg.src && seg.src === prev.src) return 'cut';
-    return 'xfade';
-  });
   return (
-    <AbsoluteFill style={{ background: THEME.bg }}>
+    <ThemeContext.Provider value={THEME}>
+    <AbsoluteFill style={{ background: THEME.bg, overflow: 'hidden' }}>
       {segments.map((seg, i) => {
-        // the OUTGOING shot holds a bit longer under an incoming crossfade (later JSX paints on top)
-        const extend = i + 1 < segments.length && transIn[i + 1] === 'xfade' ? XF : 0;
+        const row = rows[i];
         return (
-          <Sequence key={i} from={starts[i]} durationInFrames={df[i] + extend}>
-            <SegFade fadeInF={transIn[i] === 'xfade' ? XF : 0}>
-              <Seg seg={seg} durF={df[i]} />
-            </SegFade>
+          <Sequence key={i} name={`Shot ${seg.n ?? i + 1} · ${seg.kind}`} from={row.start} durationInFrames={row.frames + row.tail}>
+            <SegmentTrack seg={seg} durF={row.frames} fadeInF={row.fadeIn} />
           </Sequence>
         );
       })}
 
       {/* sound design: soft whoosh connective tissue on each cut */}
-      {sfx?.whoosh && starts.map((s, i) => i === 0 ? null : (
+      {sfx?.whoosh && starts.map((s, i) => i === 0 || segments[i].studio ? null : (
         <Sequence key={`w${i}`} from={Math.max(0, s - 3)} durationInFrames={fps}><Audio src={staticFile(sfx.whoosh!)} volume={ACCENT_VOL.whoosh} /></Sequence>
       ))}
+      {sfx && segments.flatMap((seg, i) => (seg.soundCues ?? []).map((cue, index) => {
+        const from = starts[i] + Math.round(cue.atSec * fps);
+        const available = Math.min(rows[i].frames - Math.round(cue.atSec * fps), acc - from);
+        if (!sfx[cue.sound] || available <= 0) return null;
+        return <Sequence key={`cue-${i}-${index}`} from={from} durationInFrames={available}>
+          <Audio src={staticFile(sfx[cue.sound]!)} volume={(frame) => (cue.volume ?? 0.25)
+            * Math.min(1, (available - 1 - frame) / Math.max(1, Math.min(available - 1, Math.round(fps * 0.06))))} />
+        </Sequence>;
+      }))}
       {/* per-beat accent: each key moment gets its own distinct sound, landing as the beat reads */}
       {sfx && segments.map((seg, i) => (seg.accent && sfx[seg.accent]) ? (
         <Sequence key={`ac${i}`} from={starts[i] + Math.round((seg.accentAtSec ?? 0.3) * fps)} durationInFrames={Math.round(1.6 * fps)}>
           <Audio src={staticFile(sfx[seg.accent]!)} volume={ACCENT_VOL[seg.accent] ?? 0.5} /></Sequence>
       ) : null)}
       {/* the before->after pivot: riser swelling in, deep boom on the reveal */}
-      {sfx?.riser && pivotFrame > 0 && (
+      {sfx?.riser && pivotFrame > 0 && !segments[pivotIdx]?.studio && (
         <Sequence from={Math.max(0, pivotFrame - Math.round(1.4 * fps))} durationInFrames={Math.round(1.8 * fps)}>
           <Audio src={staticFile(sfx.riser)} volume={ACCENT_VOL.riser} /></Sequence>
       )}
-      {(sfx?.pivot_boom || sfx?.impact) && pivotFrame > 0 && (
+      {(sfx?.pivot_boom || sfx?.impact) && pivotFrame > 0 && !segments[pivotIdx]?.studio && (
         <Sequence from={pivotFrame} durationInFrames={Math.round(1.8 * fps)}>
           <Audio src={staticFile((sfx.pivot_boom || sfx.impact)!)} volume={ACCENT_VOL.pivot_boom} /></Sequence>
       )}
@@ -689,38 +764,15 @@ export const Timeline: React.FC<TimelineProps> = ({ fps, music, musicVolume = 0.
           exclusive in contracts.py, so speech can never be accidentally doubled. */}
       {narration?.src && (() => {
         const from = Math.max(0, Math.round((narration.startAtSec ?? 0) * fps));
-        return <Sequence from={from} durationInFrames={Math.max(1, acc - from)}>
+        if (from >= acc) return null;
+        return <Sequence from={from} durationInFrames={acc - from}>
           <Audio src={staticFile(narration.src)} volume={narration.volume ?? 1} />
         </Sequence>;
       })()}
       {/* music bed: ducked under every VO window (sidechain feel), eased edges, fade-out at the end */}
-      {music && (() => {
-        const voWins = segments.map((s, i) => (s.vo ? [starts[i], starts[i] + df[i]] : null)).filter(Boolean) as number[][];
-        if (narration?.src) {
-          const a = Math.max(0, Math.round((narration.startAtSec ?? 0) * fps));
-          const declared = narration.durationSec && narration.durationSec > 0
-            ? Math.round(narration.durationSec * fps) : acc - a;
-          voWins.push([a, Math.min(acc, a + declared)]);
-        }
-        const ramp = Math.round(0.3 * fps);
-        const DUCK = 0.45;
-        const vol = (f: number) => {
-          let duck = 1;
-          for (const [a, b] of voWins) {
-            const d = interpolate(f, [a - ramp, a, b, b + ramp], [1, DUCK, DUCK, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-            duck = Math.min(duck, d);
-          }
-          const fadeIn = interpolate(f, [0, Math.round(0.5 * fps)], [0, 1], { extrapolateRight: 'clamp' });
-          const fadeOutFrames = Math.max(1, Math.round(Math.max(0, musicFadeOutSec) * fps));
-          const fadeEnd = Math.max(0, acc - 1);
-          const fadeStart = Math.max(0, fadeEnd - fadeOutFrames + 1);
-          const fadeOut = fadeOutFrames <= 1
-            ? (f >= fadeEnd ? 0 : 1)
-            : interpolate(f, [fadeStart, fadeEnd], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-          return musicVolume * duck * fadeIn * fadeOut;
-        };
-        return <Audio src={staticFile(music)} volume={vol} />;
-      })()}
+      {music && <Audio src={staticFile(music)} loop loopVolumeCurveBehavior="extend"
+        volume={(frame) => musicGain(frame, acc, fps, voWins, musicVolume, musicFadeOutSec)} />}
     </AbsoluteFill>
+    </ThemeContext.Provider>
   );
 };

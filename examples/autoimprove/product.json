@@ -1,0 +1,10 @@
+{
+  "name": "auto-improve",
+  "oneLiner": "A GAN-style self-improvement loop for any text artifact: mutate, judge independently, keep only verified wins.",
+  "what_it_is": "Point it at a file in a git repo. It mutates the file, grades each candidate with a separate judge model against a rubric, then a debiased pairwise gate keeps only edits that beat the champion 2-0 in shuffled orderings. Every kept change is a git commit.",
+  "audience": "developers and writers who distrust one-shot LLM rewrites",
+  "pain": "Asking an LLM to improve your text produces confident rewrites you cannot verify; slop ships.",
+  "differentiator": "The model that mutates never grades; a double-blind pairwise gate reverts confident-but-worse rewrites. The git history is the proof.",
+  "proof": { "metric": "live run", "value": "68 -> 84", "note": "this video's own skill doc, 8 iterations, 4 verified keeps, today" },
+  "cta": { "headline": "every commit a verified gain", "action": "Open source. Point it at your file.", "url": "github.com/crimeacs/auto-improve" }
+}

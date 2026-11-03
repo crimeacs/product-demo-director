@@ -41,6 +41,27 @@ class ArtifactManifestTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "required but missing"):
                 verify_artifact(video, os.path.join(temp, "missing.json"), True)
 
+    def test_judge_rejects_changed_review_profile_even_when_video_hash_matches(self):
+        with tempfile.TemporaryDirectory() as temp:
+            video = os.path.join(temp, "demo.mp4")
+            props_path = os.path.join(temp, "demo.props.json")
+            with open(video, "wb") as fh:
+                fh.write(b"video")
+            props = {"profile": "promo-short", "segments": []}
+            with open(props_path, "w") as fh:
+                json.dump(props, fh)
+            with open(os.path.join(temp, "demo.artifact.json"), "w") as fh:
+                json.dump({"output": {"sha256": sha256_file(video)}, "propsSha256": hashlib.sha256(
+                    json.dumps(props, sort_keys=True, separators=(",", ":")).encode()).hexdigest()}, fh)
+            self.assertIsNotNone(verify_artifact(video, required=True))
+            with open(props_path, "w") as fh:
+                json.dump({**props, "profile": "sales"}, fh)
+            with self.assertRaisesRegex(RuntimeError, "props hash mismatch"):
+                verify_artifact(video, required=True)
+            os.unlink(props_path)
+            with self.assertRaisesRegex(RuntimeError, "props are missing"):
+                verify_artifact(video, required=True)
+
     def test_stem_manifest_wins_over_stale_generic_manifest(self):
         with tempfile.TemporaryDirectory() as temp:
             video = os.path.join(temp, "candidate.mp4")
@@ -168,6 +189,30 @@ class ArtifactManifestTests(unittest.TestCase):
                     project,
                     lambda *_: None,
                 )
+
+    def test_empty_claim_evidence_is_rejected_before_binding(self):
+        with tempfile.TemporaryDirectory() as project:
+            with open(os.path.join(project, "proof.json"), "wb"):
+                pass
+            bound = []
+            with self.assertRaisesRegex(ValueError, r"claims\[0\].evidence\[1\] is empty"):
+                bind_claim_evidence_inputs(
+                    {"claims": [{"evidence": ["https://example.com/api", "proof.json"]}]},
+                    project, lambda *args: bound.append(args),
+                )
+            self.assertEqual(bound, [])
+
+    def test_binary_claim_evidence_is_bound_and_external_urls_remain_unfetched(self):
+        with tempfile.TemporaryDirectory() as project:
+            path = os.path.join(project, "proof.bin")
+            with open(path, "wb") as handle:
+                handle.write(b"\x00\xff\x80\x00")
+            bound = []
+            bind_claim_evidence_inputs(
+                {"claims": [{"evidence": ["https://example.com/api", "proof.bin"]}]},
+                project, lambda *args: bound.append(args),
+            )
+            self.assertEqual(bound, [("claim-evidence", "proof.bin", path)])
 
 
 if __name__ == "__main__":

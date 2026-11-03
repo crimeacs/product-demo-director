@@ -9,11 +9,11 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@remotion/cli": "4.0.496",
-    "@remotion/google-fonts": "4.0.496",
+    "@remotion/cli": "4.0.540",
+    "@remotion/google-fonts": "4.0.540",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "remotion": "4.0.496"
+    "remotion": "4.0.540"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",

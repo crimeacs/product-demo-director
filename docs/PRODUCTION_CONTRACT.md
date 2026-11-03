@@ -168,6 +168,12 @@ work from human decisions.
 - `storyBeats` may declare two inseparable functions in one continuous take, such as
   `["test", "restraint"]`; do not split the footage merely to satisfy metadata.
 - `sourceType` distinguishes `product`, `human`, and explanatory material.
+- `visualTreatment: "presentation"` identifies typeset excerpts, transcript pages, and other
+  explanatory graphics even when delivered as `kind: "clip"` MP4s. `maxCardRatio` counts their full
+  shot duration, every card kind, and all `sourceType: "slide"` or `"generated"` shots. Use
+  `visualTreatment: "recording"` for captured product, human, or external footage; it does not
+  imply live behavior and cannot exempt a declared card or generated source. This is authored
+  classification, not automatic visual detection; mark externally sourced presentation clips.
 - `liveState: true` marks progressive product behavior rather than a prefilled card.
 - `stateId` identifies the visible product state. Reusing a screen is not repetition when its state
   or story function advances.
@@ -529,10 +535,31 @@ For live-product profiles, remaining on one screen is continuity when product st
 advances. The judge should penalize replayed conclusions or repeated states with no new story
 information—not the source filename.
 
-For forensic continuity review, inspect contiguous short clips at high sampling FPS and require a
-timestamped finding with visible evidence. Whole-video model passes are useful for coarse narrative
-lenses, but they can miss single-frame defects or invent timestamps. Reject findings outside the
-measured runtime or unsupported by the transcript, frames, or evidence manifest.
+For temporal production review, submit the complete video to the opt-in motion lens:
+
+```sh
+python tools/judge.py --video projects/my-demo/out/demo-final.mp4 \
+  --require-artifact --model gemini-2.5-pro --lens motion --fps 24 --runs 1 \
+  --out projects/my-demo/out/judge-motion.json
+```
+
+The report describes the experienced sequence, then gives numeric time intervals, visible/audible
+evidence, viewer impact, production layer, and correction class for each observed defect. It separates
+camera, source playback, editing, transitions/masks, typography/annotations, and audio. Unverified
+observations stay explicit. Its scores are advisory, with no structural calibration or aesthetic gate.
+`--all-lenses` retains the existing four audience lenses; request `motion` separately.
+
+Sampling must be finite and greater than zero through 24 fps; unsupported values fail before upload.
+`review_receipt` records requested/effective submitted fps, exact video hash and duration, artifact/build
+and props bindings when verified, requested/returned models, prompt/code hashes, and every attempt's
+provider usage and status, including invalid responses. Missing usage remains unknown. Effective fps
+means the `VideoMetadata` value sent to Google; the provider does not independently confirm the frames
+it selected. Even 24 fps cannot certify every source frame or prove complete model attention.
+
+Check reported intervals in the video and inspect contiguous boundary clips when needed. A whole-video
+pass can miss a single-frame defect or invent an observation; out-of-runtime motion timestamps are
+rejected, but in-range findings still require visible evidence. Contact sheets remain composition aids,
+not temporal review.
 
 ## Improve loop and the cut-mechanics plateau
 
@@ -567,3 +594,9 @@ finale.
 
 When the recurring complaint requires a new action, source, line, or product state, classify it as
 `recapture`, `narration change`, `claim change`, or `product change`. Do not disguise it as a recut.
+
+## Recorded product replays
+
+Use `visualTreatment: "replay"` for native product components reconstructed from an existing recorded case. Each replay must explicitly set `liveState: false` and name a `replayProvenance` file included in `production.sourceManifests`. This binds the replay manifest to the rendered artifact. The manifest should identify frozen evidence, source revision, state seeds, original recording references, and raster generation. Display a readable replay disclosure in the film. A replay does not satisfy `requireLiveProgression`.
+
+Native UI replay and editorial presentation are distinct: generated cards and typeset excerpts still count as presentation, even when labeled as replay or encoded as MP4. Restoring native component state must not change findings, omit contradictory evidence, or imply a new live action.

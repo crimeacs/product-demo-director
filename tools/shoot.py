@@ -149,9 +149,19 @@ def plan_web(shot):
 
 
 # ---------------------------------------------------------------- normalize
-def normalize(webm, mp4, speed=1.0, trim_lead=0.4, raw_events=None, edited_events=None):
-    vf = (f"setpts=PTS/{speed},scale=1920:1080:force_original_aspect_ratio=decrease,"
-          f"pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30,format=yuv420p")
+def normalize(webm, mp4, speed=1.0, trim_lead=0.4, raw_events=None, edited_events=None,
+              preserve_resolution=False):
+    source_metadata_path = os.path.splitext(webm)[0] + ".capture.json"
+    metadata = None
+    if os.path.exists(source_metadata_path):
+        with open(source_metadata_path) as handle:
+            metadata = json.load(handle)
+        if metadata.get("video", {}).get("sha256") != capture.file_sha256(webm):
+            raise ValueError("capture metadata does not match source video")
+    # Retain high-density source pixels. Pad odd inputs by at most one pixel for yuv420p.
+    geometry = ("pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0" if preserve_resolution else
+                "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2")
+    vf = f"setpts=PTS/{speed},{geometry},fps=30,setsar=1,format=yuv420p"
     cmd = ["ffmpeg", "-y", "-ss", str(trim_lead), "-i", webm, "-vf", vf,
            "-an", "-c:v", "libx264", "-crf", "18", "-preset", "medium", mp4]
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -163,9 +173,22 @@ def normalize(webm, mp4, speed=1.0, trim_lead=0.4, raw_events=None, edited_event
             edited_events,
             trim_lead,
             speed,
-            source_width=capture.W,
-            source_height=capture.H,
+            source_width=(metadata or {}).get("viewportCss", {}).get("width", capture.W),
+            source_height=(metadata or {}).get("viewportCss", {}).get("height", capture.H),
         )
+    if metadata is not None or preserve_resolution:
+        source_video = (metadata or {}).get("video") or {
+            "path": os.path.abspath(webm), "sha256": capture.file_sha256(webm), **capture.media_dimensions(webm)}
+        normalized = {**(metadata or {}), "schemaVersion": 1, "kind": "normalized-capture",
+                      "sourceVideo": source_video,
+                      "normalization": {"preserveResolution": preserve_resolution,
+                                        "trimLeadSec": trim_lead, "speed": speed, "fps": 30},
+                      "video": {"path": os.path.abspath(mp4), "sha256": capture.file_sha256(mp4),
+                                "dimensionsVerified": True, **capture.media_dimensions(mp4)}}
+        if edited_events and os.path.exists(edited_events):
+            normalized["eventsPath"] = os.path.abspath(edited_events)
+        with open(os.path.splitext(mp4)[0] + ".capture.json", "w") as handle:
+            json.dump(normalized, handle, indent=2)
     return mp4
 
 
@@ -185,6 +208,7 @@ def shoot_terminal(shot, raw_dir, out_mp4, project):
 
 def shoot_web(shot, raw_dir, out_mp4, project, steps_path, replan=False, plan_only=False):
     name = shot["name"]
+    capture.capture_geometry(capture_scale=shot.get("captureScale"))  # reject before any probe/actions
     if shot.get("steps"):
         steps, info = shot["steps"], {"scrollHeight": None, "ctas": []}
     elif os.path.exists(steps_path) and not replan:
@@ -201,16 +225,18 @@ def shoot_web(shot, raw_dir, out_mp4, project, steps_path, replan=False, plan_on
     import io, contextlib
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        capture.run(shot["url"], steps, webm, quiet=False)
+        capture.run(shot["url"], steps, webm, quiet=False, capture_scale=shot.get("captureScale"))
     for line in buf.getvalue().splitlines():
         if "miss:" in line:
             misses.append(line.strip())
     raw_events = os.path.splitext(webm)[0] + ".events.json"
     edited_events = os.path.splitext(out_mp4)[0] + ".events.json"
     normalize(webm, out_mp4, speed=shot.get("speed", 1.0), trim_lead=shot.get("trimLead", 0.4),
-              raw_events=raw_events, edited_events=edited_events)
+              raw_events=raw_events, edited_events=edited_events,
+              preserve_resolution=shot.get("captureScale") is not None)
     return {"name": name, "kind": "web", "out": os.path.relpath(out_mp4, project),
             "events": os.path.relpath(edited_events, project) if os.path.exists(edited_events) else None,
+            "captureMetadata": os.path.relpath(os.path.splitext(out_mp4)[0] + ".capture.json", project),
             "steps": os.path.relpath(steps_path, project), "clickMisses": misses}
 
 
@@ -279,13 +305,16 @@ def main():
     ap.add_argument("--url", default="")
     ap.add_argument("--goal", default="")
     ap.add_argument("--out", default="")
+    ap.add_argument("--capture-scale", type=int, choices=(1, 2, 3, 4), default=None,
+                    help="one-shot web mode: retain 1–4x device pixels; use captureScale in shoot.json")
     a = ap.parse_args()
 
     if a.url:
         out = a.out or "web.mp4"
         raw_dir = os.path.dirname(os.path.abspath(out)) or "."
         os.makedirs(raw_dir, exist_ok=True)
-        shot = {"name": os.path.splitext(os.path.basename(out))[0], "kind": "web", "url": a.url, "goal": a.goal}
+        shot = {"name": os.path.splitext(os.path.basename(out))[0], "kind": "web", "url": a.url,
+                "goal": a.goal, "captureScale": a.capture_scale}
         steps_path = os.path.join(raw_dir, shot["name"] + ".steps.json")
         rec = shoot_web(shot, raw_dir, out, raw_dir, steps_path, replan=a.replan, plan_only=a.plan_only)
         if not a.plan_only:

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>__REVIEW_TITLE__ · Director review</title>
+  <style>
+    :root{--bg:#0e1311;--panel:#161d19;--line:#2a342e;--text:#edf2ee;--muted:#9daea3;--accent:#a9d5b8;--warn:#f1c080;--error:#f2a79e}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;line-height:1.5}
+    button,input,a{font:inherit}button,a,input{outline-offset:5px}button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--accent)}
+    button{color:inherit;cursor:pointer}button:disabled{opacity:.4;cursor:not-allowed}a{color:var(--accent);text-underline-offset:4px}h1,h2,h3,p{margin:0}h1{font-size:clamp(24px,3vw,34px);letter-spacing:-1.2px;font-weight:560}h2{font-size:18px;font-weight:550;letter-spacing:-.3px}h3{font-size:15px;font-weight:600}
+    .mono,time,.count,.metric b{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-variant-numeric:tabular-nums}.muted{color:var(--muted)}.eyebrow{font-size:10px;letter-spacing:1.9px;text-transform:uppercase;color:var(--muted)}
+    header{border-bottom:1px solid var(--line);padding:20px 36px;display:flex;align-items:center;justify-content:space-between;gap:20px}.wordmark{font-weight:600;letter-spacing:-.2px}.wordmark span{color:var(--muted);font-weight:400}.local{font-size:11px;color:var(--muted)}
+    main{max-width:1640px;margin:auto;padding:32px 36px 36px}.heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:26px}.heading .eyebrow{margin-bottom:6px}.status{font-size:12px;padding:7px 12px;border:1px solid var(--line);border-radius:4px;white-space:nowrap;background:var(--panel)}.status.pass{color:var(--accent)}.status.attention{color:var(--warn)}
+    .layout{display:grid;grid-template-columns:minmax(0,1fr) 352px;gap:28px}.viewer{min-width:0}.screen{position:relative;background:#080c09;border:1px solid var(--line);aspect-ratio:16/9;display:grid;place-items:center;border-radius:7px;overflow:hidden}video{width:100%;height:100%;object-fit:contain;display:block}.empty{max-width:400px;padding:24px;text-align:center}.empty h2{margin:12px 0}.empty p{color:var(--muted)}.empty code{display:block;font-size:11px;margin-top:18px;color:var(--accent)}
+    .player-error{background:#34231e;padding:14px;margin-top:8px;border-radius:4px;color:var(--warn)}.transport{display:flex;align-items:center;gap:8px;padding:13px 0}.control{border:1px solid var(--line);border-radius:4px;background:var(--panel);padding:7px 12px;font-size:12px}.control:hover:enabled{border-color:var(--muted)}.timecode{margin-left:auto;color:var(--muted);font-size:12px}.timecode b{color:var(--text);font-weight:500}
+    .timeline{display:flex;gap:3px;height:35px;position:relative;margin-top:3px}.timeline button{position:relative;overflow:hidden;flex:var(--duration) 1 0;min-width:4px;border:0;border-bottom:2px solid transparent;background:#283a30;color:var(--muted);text-align:left;padding:0 8px;font:10px ui-monospace,monospace;border-radius:2px}.timeline button:nth-child(even){background:#344237}.timeline button[aria-pressed="true"]{border-color:var(--accent);color:var(--text);background:#4a6956}.timeline button.has-issue{border-top:2px solid var(--warn)}
+    .ruler{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);padding:7px 0 17px;border-bottom:1px solid var(--line)}.detail{padding:21px 0}.detail-title{display:flex;justify-content:space-between;gap:18px;align-items:start;margin-bottom:12px}.detail .eyebrow{margin-bottom:7px}.detail blockquote{margin:0;font-size:clamp(17px,1.8vw,23px);font-weight:400;line-height:1.5;letter-spacing:-.3px;max-width:780px}.detail .silent{color:var(--muted);font-size:16px}.source{display:flex;gap:20px;flex-wrap:wrap;margin-top:20px;color:var(--muted);font-size:11px}.source b{color:var(--text);font-weight:500}.reason{margin-top:12px;font-size:12px;color:var(--muted)}
+    aside{border-left:1px solid var(--line);padding-left:26px;min-width:0}.aside-head{display:flex;justify-content:space-between;align-items:center;margin:0 0 14px}.count{color:var(--muted);font-size:11px}.search{width:100%;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:4px;padding:9px 11px;margin:5px 0 12px;font-size:12px}.shot-list{display:flex;flex-direction:column;gap:5px;max-height:670px;overflow:auto;padding-right:5px;scrollbar-color:var(--line) transparent}
+    .shot{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;width:100%;padding:9px;border:1px solid transparent;border-radius:5px;background:transparent;text-align:left;align-items:center}.shot:hover{background:var(--panel)}.shot[aria-pressed="true"]{border-color:#56705e;background:#1c2a21}.thumb{width:84px;aspect-ratio:16/9;border-radius:3px;object-fit:cover;background:#25352b;display:grid;place-items:center;font:16px ui-monospace,monospace;color:var(--accent)}.shot small{display:block;color:var(--muted);font:10px ui-monospace,monospace;margin-bottom:5px}.shot strong{font-size:11px;font-weight:500;line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.shot .flag{color:var(--warn)}
+    .review-bottom{margin-top:14px;border-top:1px solid var(--line);padding-top:24px;display:grid;grid-template-columns:minmax(0,1fr) 352px;gap:28px}.section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:20px;margin-bottom:17px}.section-heading p{font-size:11px;color:var(--muted)}.findings{max-height:390px;overflow:auto}.finding{padding:13px 0;border-top:1px solid var(--line);display:grid;grid-template-columns:68px minmax(0,1fr);gap:16px}.finding:first-child{border-top:0}.severity{font:10px ui-monospace,monospace;text-transform:uppercase;color:var(--warn);padding-top:3px}.severity.error{color:var(--error)}.finding p{font-size:12px;line-height:1.6}.finding small{display:block;font:10px ui-monospace,monospace;color:var(--muted);margin-top:4px}.finding button{border:0;background:none;color:var(--accent);padding:4px 0;font-size:11px;text-decoration:underline;text-underline-offset:3px}.clear{padding:18px 0;color:var(--muted);font-size:13px}.receipt{border-left:1px solid var(--line);padding-left:26px}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}.metric b{font-size:17px;font-weight:400;display:block}.metric span{color:var(--muted);font-size:10px}.files{display:flex;gap:13px;flex-wrap:wrap;margin-top:24px;font-size:11px}.binding{margin-top:18px;color:var(--muted);font-size:10px;overflow-wrap:anywhere}.foot{border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:20px;margin-top:25px;padding-top:16px;font-size:10px;color:var(--muted)}[hidden]{display:none!important}
+    .editorial{border-top:1px solid var(--line);padding:24px 0;margin-top:14px}.editorial .metrics{grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 18px}.editorial .findings{max-height:260px}.editorial-note{font-size:12px;color:var(--muted);margin-bottom:18px}.severity.info{color:var(--muted)}
+    .screen video{width:var(--preview-width,100%);max-width:100%;height:auto;max-height:100%}.screen video:fullscreen{width:100%;height:100%}.preview-size{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:12px}.preview-size .control[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}.preview-size span{font-size:11px;color:var(--muted)}.preview-size .preview-note{margin-left:auto}.framing-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:18px}.framing-table th,.framing-table td{text-align:left;border-bottom:1px solid var(--line);padding:10px 12px 10px 0;vertical-align:top}.framing-table th{font-size:10px;font-weight:500;color:var(--muted)}.framing-table small{display:block;color:var(--muted);font-size:10px}.framing-table button{background:none;border:0;padding:0;color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-align:left}.framing-table .needs-review{color:var(--warn)}.framing-scroll{overflow-x:auto}
+    @media(min-width:1450px){.shot-list{max-height:790px}}
+    @media(max-width:1100px){.layout,.review-bottom{grid-template-columns:minmax(0,1fr) 290px}.shot{grid-template-columns:66px minmax(0,1fr)}.thumb{width:66px}aside,.receipt{padding-left:20px}.layout,.review-bottom{gap:20px}main{padding:24px}}
+    @media(max-width:780px){header{padding:16px 20px}.local{display:none}main{padding:24px 18px}.heading{align-items:flex-start;flex-direction:column;gap:10px}.layout,.review-bottom{grid-template-columns:1fr}aside,.receipt{border-left:0;padding:20px 0 0;border-top:1px solid var(--line)}.shot-list{max-height:310px}.shot{grid-template-columns:90px minmax(0,1fr)}.thumb{width:90px}.transport{flex-wrap:wrap}.timeline button{padding:0 3px}.foot{flex-direction:column;gap:6px}}
+    @media(max-width:600px){.editorial .metrics{grid-template-columns:1fr 1fr}.editorial .section-heading{align-items:flex-start;flex-direction:column;gap:6px}}
+    @media(prefers-reduced-motion:no-preference){button{transition:background .15s ease,border-color .15s ease}button:active:enabled{transform:translateY(1px)}}
+  </style>
+</head>
+<body>
+  <header><div class="wordmark">Product Demo Director <span>/ review room</span></div><div class="local">LOCAL REVIEW &nbsp; · &nbsp; NO UPLOADS</div></header>
+  <main>
+    <div class="heading"><div><p class="eyebrow" id="profile"></p><h1 id="name"></h1></div><span class="status" id="status"></span></div>
+    <div class="layout">
+      <section class="viewer" aria-label="Film review">
+        <div class="preview-size" role="group" aria-label="Viewing size"><span>Viewing size</span><button class="control" data-preview-width="0" aria-pressed="true">Full</button><button class="control" data-preview-width="390" aria-pressed="false">390px</button><button class="control" data-preview-width="320" aria-pressed="false">320px</button><span class="preview-note" id="preview-note" aria-live="polite"></span></div>
+        <div class="screen" id="screen"><video id="video" controls preload="metadata" playsinline hidden aria-label="Demo film"></video><div class="empty" id="empty"><p class="eyebrow">Your story, before the render</p><h2>The edit starts here.</h2><p>Explore the sequence and narration below. A rendered cut will appear here when it is ready.</p><code>./pdd render &lt;project&gt;</code></div></div>
+        <p class="player-error" id="player-error" role="alert" hidden>The video could not be loaded. Keep this review beside its media files, then regenerate it with pdd review.</p>
+        <div class="transport"><button class="control" id="previous">Previous shot</button><button class="control" id="next">Next shot</button><button class="control" id="loop" aria-pressed="false">Loop shot: off</button><span class="timecode mono"><b id="clock">00:00.00</b> / <span id="duration"></span></span></div>
+        <nav class="timeline" id="timeline" aria-label="Shot timeline"></nav><div class="ruler mono"><span>00:00</span><span id="timing"></span><span id="end"></span></div>
+        <div class="detail"><div class="detail-title"><div><p class="eyebrow" id="beat"></p><h2 id="shot-title"></h2></div><span class="count" id="shot-number"></span></div><blockquote id="narration"></blockquote><div class="source" id="source"></div><p class="reason" id="reason"></p></div>
+      </section>
+      <aside aria-label="Sequence"><div class="aside-head"><h2>The sequence</h2><span class="count" id="shot-count"></span></div><label class="eyebrow" for="search">Find a shot or a line</label><input id="search" class="search" type="search" placeholder="Search the story…"><div id="shot-list" class="shot-list"></div><p class="clear" id="no-results" hidden>No matching shots. Try another word.</p></aside>
+    </div>
+    <section class="editorial" aria-label="Advisory editorial timing"><div class="section-heading"><h2>Story timing</h2><p id="editorial-status">Authored evidence · advisory</p></div><p class="editorial-note" id="editorial-note"></p><div id="editorial-metrics" class="metrics"></div><div id="editorial-findings" class="findings"></div></section>
+    <section class="editorial" aria-label="Advisory small-screen readability"><div class="section-heading"><h2>Small-screen readability</h2><p>Declared geometry · advisory</p></div><p class="editorial-note" id="framing-note"></p><div class="framing-scroll"><table class="framing-table" id="framing-table" hidden><thead><tr><th>Subject</th><th>Viewing width</th><th>Projected text</th><th>Closeup</th><th>Subject fit</th></tr></thead><tbody id="framing-beats"></tbody></table></div><div class="findings" id="framing-findings"></div></section>
+    <div class="review-bottom">
+      <section aria-label="Production checks"><div class="section-heading"><h2>Before it ships</h2><p id="issue-count"></p></div><div id="findings" class="findings"></div></section>
+      <section class="receipt" aria-label="Delivery receipt"><h2>Delivery receipt</h2><div id="metrics" class="metrics"></div><div id="files" class="files"></div><p class="binding" id="binding"></p></section>
+    </div>
+    <footer class="foot"><span id="generated"></span><span>Evidence is a snapshot. Regenerate after changing the story or media.</span></footer>
+  </main>
+  <script id="review-data" type="application/json">__REVIEW_DATA__</script>
+  <script id="review-timing">
+    function reviewShotIndex(shots,time,fps){
+      // Media clocks may truncate, not just round, to microseconds. Restore at
+      // most one microsecond of precision loss (1079/30 becomes 35.966666);
+      // rounding to the nearest picture frame would select the next shot early.
+      const frame=Math.floor((Math.max(0,time)+0.000001)*fps);
+      return shots.findIndex(shot=>frame>=Math.round(shot.startSec*fps)&&frame<Math.round(shot.endSec*fps));
+    }
+    function createReviewSeekGuard(shots,fps){
+      let pendingIndex=null;
+      return {
+        begin(index){pendingIndex=index},
+        cancel(){pendingIndex=null},
+        allow(time,seeking,settled=false){
+          if(seeking)return false;
+          // Playback can advance past a one-frame shot before this queued event
+          // runs. A completed latest seek releases the guard even in that case.
+          if(settled)pendingIndex=null;
+          if(pendingIndex!==null&&reviewShotIndex(shots,time,fps)!==pendingIndex)return false;
+          pendingIndex=null;return true;
+        }
+      };
+    }
+  </script>
+  <script id="review-preview">
+    function applyReviewPreviewWidth(screen,buttons,width){
+      const selected=[320,390].includes(width)?width:0;
+      screen.style.setProperty('--preview-width',selected?`${selected}px`:'100%');
+      buttons.forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.previewWidth)===selected)));
+      return selected;
+    }
+  </script>
+  <script>
+    'use strict';
+    const data=JSON.parse(document.getElementById('review-data').textContent);
+    const $=id=>document.getElementById(id);
+    const text=(id,value)=>{$(id).textContent=String(value??'')};
+    const element=(tag,className,value)=>{const node=document.createElement(tag);node.className=className||'';if(value!==undefined)node.textContent=String(value);return node};
+    const stamp=(seconds,precise=false)=>{const units=precise?100:1,ticks=Math[precise?'round':'floor'](Math.max(0,seconds||0)*units),minutes=Math.floor(ticks/(60*units)),remainder=(ticks%(60*units))/units;return `${String(minutes).padStart(2,'0')}:${remainder.toFixed(precise?2:0).padStart(precise?5:2,'0')}`};
+    const video=$('video'),buttons=[],segments=[];let selected=0,looping=false;
+    const seekGuard=createReviewSeekGuard(data.shots,data.fps);
+    function seekTo(time,index=selected){seekGuard.begin(index);video.currentTime=time;text('clock',stamp(time,true))}
+    const previewButtons=Array.from(document.querySelectorAll('[data-preview-width]'));let previewWidth=0;
+    const previewNote=()=>text('preview-note',data.video?`${Math.round(video.getBoundingClientRect().width)} CSS px wide${previewWidth?' · small-screen check':''}`:'Choose a size after rendering');
+    previewButtons.forEach(button=>{button.disabled=!data.video;button.addEventListener('click',()=>{previewWidth=applyReviewPreviewWidth($('screen'),previewButtons,Number(button.dataset.previewWidth));previewNote()})});
+    if(typeof ResizeObserver!=='undefined')new ResizeObserver(previewNote).observe(video);
+    window.addEventListener('resize',previewNote);
+    text('name',data.name);text('profile',`${data.profile} / ${data.shots.length} shots / ${data.fps} fps`);text('status',data.status);$('status').classList.add(data.verified?'pass':'attention');
+    text('duration',stamp(data.durationSec,true));text('end',stamp(data.durationSec));text('timing',data.timing);text('shot-count',String(data.shots.length).padStart(2,'0'));
+    text('issue-count',`${data.errors} errors · ${data.warnings} warnings`);text('generated',`Generated ${new Date(data.generatedAt).toLocaleString()}`);
+    if(data.video){video.src=data.video;video.hidden=false;$('empty').hidden=true;if(data.shots[0].thumbnail)video.poster=data.shots[0].thumbnail}
+    video.addEventListener('error',()=>{seekGuard.cancel();$('player-error').hidden=false});
+    // Native transport interaction supersedes an earlier requested shot seek.
+    video.addEventListener('pointerdown',()=>seekGuard.cancel());
+    video.addEventListener('keydown',()=>seekGuard.cancel());
+    function select(index,seek=true){
+      selected=Math.max(0,Math.min(data.shots.length-1,index));const shot=data.shots[selected];
+      buttons.forEach((button,i)=>button.setAttribute('aria-pressed',String(i===selected)));segments.forEach((button,i)=>button.setAttribute('aria-pressed',String(i===selected)));
+      text('beat',shot.beat);text('shot-title',shot.title);text('shot-number',`${String(selected+1).padStart(2,'0')} / ${String(data.shots.length).padStart(2,'0')}`);
+      text('narration',shot.narration||'A visual beat. Let the product speak.');$('narration').classList.toggle('silent',!shot.narration);
+      $('source').replaceChildren();for(const [label,value] of [['Source',shot.source],['In',`${shot.inSec.toFixed(2)}s`],['Hold',`${shot.durationSec.toFixed(2)}s · ${shot.frames}f`]]){const line=element('span','',`${label}  `);line.append(element('b','mono',value));$('source').append(line)}
+      text('reason',shot.transition);$('reason').hidden=!shot.transition;$('previous').disabled=selected===0;$('next').disabled=selected===data.shots.length-1;
+      if(seek&&data.canSeek)seekTo(shot.startSec);
+      if(!data.video)text('clock',stamp(shot.startSec,true));
+    }
+    data.shots.forEach((shot,index)=>{
+      const button=element('button','shot');button.type='button';button.setAttribute('aria-label',`Shot ${index+1}: ${shot.title}`);button.addEventListener('click',()=>select(index));
+      const thumbnail=shot.thumbnail?element('img','thumb'):element('span','thumb',String(index+1).padStart(2,'0'));if(shot.thumbnail){thumbnail.src=shot.thumbnail;thumbnail.alt='';thumbnail.loading='lazy'}
+      const copy=element('div');copy.append(element('small',shot.findings.length?'flag':'',`${stamp(shot.startSec)} / ${shot.durationSec.toFixed(1)}s${shot.findings.length?' · check':''}`),element('strong','',shot.title));button.append(thumbnail,copy);$('shot-list').append(button);buttons.push(button);
+      const segment=element('button',shot.findings.length?'has-issue':'',String(index+1).padStart(2,'0'));segment.style.setProperty('--duration',shot.durationSec);segment.title=`${shot.title} · ${shot.durationSec.toFixed(2)}s`;segment.setAttribute('aria-label',`Select shot ${index+1}`);segment.addEventListener('click',()=>select(index));$('timeline').append(segment);segments.push(segment);
+    });
+    $('previous').addEventListener('click',()=>select(selected-1));$('next').addEventListener('click',()=>select(selected+1));$('loop').disabled=!data.canSeek;
+    $('loop').addEventListener('click',()=>{looping=!looping;$('loop').setAttribute('aria-pressed',String(looping));text('loop',`Loop shot: ${looping?'on':'off'}`);if(looping){seekTo(data.shots[selected].startSec);video.play().catch(()=>{})}});
+    function syncPlaybackSelection(event){
+      if(data.canSeek&&!seekGuard.allow(video.currentTime,video.seeking,event.type==='seeked'))return;
+      text('clock',stamp(video.currentTime,true));if(!data.canSeek)return;
+      const current=reviewShotIndex(data.shots,video.currentTime,data.fps);
+      if(looping&&current!==selected){seekTo(data.shots[selected].startSec);return}
+      if(current>=0&&current!==selected)select(current,false);
+    }
+    video.addEventListener('timeupdate',syncPlaybackSelection);
+    video.addEventListener('seeked',syncPlaybackSelection);
+    video.addEventListener('ended',()=>{if(looping){seekTo(data.shots[selected].startSec);video.play().catch(()=>{})}});
+    $('search').addEventListener('input',()=>{const query=$('search').value.toLowerCase().trim();let count=0;data.shots.forEach((shot,index)=>{const match=[shot.title,shot.narration,shot.beat,shot.source,String(shot.n)].join(' ').toLowerCase().includes(query);buttons[index].hidden=!match;if(match)count++});$('no-results').hidden=count>0});
+    function appendFinding(container,issue,canJump=true){const row=element('div','finding'),copy=element('div');row.append(element('span',`severity ${issue.severity}`,issue.severity));copy.append(element('p','',issue.message),element('small','',issue.code));if(canJump&&issue.shot!==undefined){const index=data.shots.findIndex(shot=>shot.n===issue.shot);if(index>=0){const jump=element('button','',`Go to shot ${issue.shot}`);jump.addEventListener('click',()=>{select(index);$('shot-title').scrollIntoView({block:'center'})});copy.append(jump)}}row.append(copy);container.append(row)}
+    data.issues.forEach(issue=>appendFinding($('findings'),issue));
+    if(!data.issues.length)$('findings').append(element('p','clear',data.verified?'Delivery checks passed for this exact file. Watch the complete film to assess the story, clarity, and taste.':'No structural findings. Render and run delivery QA to verify the finished film.'));
+    const lufs=data.audio.integratedLufs,peak=data.audio.truePeakDbtp;
+    for(const [value,label] of [[stamp(data.durationSec,true),data.timing==='Script estimate'?'planned duration':'picture duration'],[data.totalFrames.toLocaleString(),'picture frames'],[Number.isFinite(lufs)?`${lufs.toFixed(1)} LUFS`:'—','measured loudness'],[Number.isFinite(peak)?`${peak.toFixed(1)} dBTP`:'—','measured true peak']]){const metric=element('div','metric');metric.append(element('b','',value),element('span','',label));$('metrics').append(metric)}
+    const editorial=data.editorial;
+    if(editorial&&editorial.available){
+      const m=editorial.metrics,percent=value=>Number.isFinite(value)?`${Math.round(value*100)}%`:'Unknown';
+      text('editorial-status',`${{'invalid':'Invalid declarations','needs-review':'Review suggested','unknown':'Incomplete declarations','clear-declared':'Declared checks clear'}[editorial.status]} · advisory`);
+      text('editorial-note','This cut’s declared source events and narration timing. These checks do not inspect the picture or predict engagement. Watch the evidence at delivery size.');
+      const anchors=Number.isFinite(m.anchoredCueCount)&&Number.isFinite(m.cueCount)?`${m.anchoredCueCount} / ${m.cueCount}`:'Unknown';
+      for(const [value,label] of [[Number.isFinite(m.firstDeclaredProofSec)?stamp(m.firstDeclaredProofSec,true):'Unknown','first declared proof'],[percent(m.setupRatio),'declared setup share'],[percent(m.navigationRatio),'declared navigation share'],[anchors,'narration cues with source anchors']]){const metric=element('div','metric');metric.append(element('b','',value),element('span','',label));$('editorial-metrics').append(metric)}
+      editorial.findings.forEach(issue=>appendFinding($('editorial-findings'),issue,data.canSeek));
+      if(!editorial.findings.length)$('editorial-findings').append(element('p','clear','The declared timing checks need no changes. Story, proof visibility, and reading comfort still need a viewing.'));
+    }else{text('editorial-note',editorial?.reason||'No matching editorial report for this rendered cut.');$('editorial-metrics').hidden=true}
+    const framing=data.framing;
+    if(framing&&framing.available){
+      text('framing-note','Projected glyph size uses the declared source measurements at each settled closeup. It does not measure blur, contrast, reading comfort, or moving frames. Use the 320px preview to inspect the actual film.');$('framing-table').hidden=false;
+      framing.shots.forEach(report=>{
+        const shotIndex=data.shots.findIndex(shot=>shot.n===report.n);
+        report.beats.forEach(beat=>{const row=element('tr'),subject=element('td');
+          const label=element(data.canSeek&&shotIndex>=0?'button':'span','',`Shot ${report.n} · ${beat.label}`);
+          if(label.tagName==='BUTTON')label.addEventListener('click',()=>{select(shotIndex,false);seekTo(data.shots[shotIndex].startSec+beat.atSec);$('screen').scrollIntoView({block:'center'})});
+          subject.append(label,element('small','',`${beat.atSec.toFixed(2)}–${beat.endSec.toFixed(2)}s in shot`));row.append(subject,element('td','mono',`${report.viewerWidthPx}px`));
+          const small=Number.isFinite(beat.projectedTextPx)&&beat.projectedTextPx<report.minTextPx,measurement=element('td',small?'needs-review':'',Number.isFinite(beat.projectedTextPx)?`${beat.projectedTextPx.toFixed(1)}px`:'Unknown');measurement.append(element('small','',`${report.minTextPx}px declared target`));row.append(measurement,element('td','mono',`${beat.scale.toFixed(2)}×`),element('td',!beat.subjectVisible||!beat.safeAreaMet?'needs-review':'',!beat.subjectVisible?'Clipped':!beat.safeAreaMet?'Inset missed':'Within declared inset'));$('framing-beats').append(row);
+        });
+        report.findings.forEach(issue=>appendFinding($('framing-findings'),issue,data.canSeek));
+      });
+      if(framing.unreportedShots.length)$('framing-findings').append(element('p','clear',`No subject measurements for shots ${framing.unreportedShots.join(', ')}; readability is unknown.`));
+    }else{text('framing-note',framing?.reason||'Readability is unknown: no matching subject measurements for this rendered cut.')}
+    data.links.forEach(link=>{const a=element('a','',link.label);a.href=link.url;a.target='_blank';a.rel='noopener';$('files').append(a)});
+    text('binding',data.videoSha256?`SHA-256 ${data.videoSha256}`:'No delivery artifact yet.');select(0,false);
+  </script>
+</body>
+</html>
