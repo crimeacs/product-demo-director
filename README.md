@@ -356,10 +356,19 @@ unrelated file.
 
 </details>
 
-## Community
+## Help make it better
 
-Contributions are welcome, from focused fixes and tests to new capture or editing capabilities. Read
-the [contribution guide](CONTRIBUTING.md) first and use the issue forms. By participating you agree to
+Every film made with this teaches it something. The craft rules in these docs are lessons from real films, and
+yours can be next. Small helps go a long way:
+
+- **Made a film with it?** Open an issue with a link and one sentence on what worked or didn't. That's how a
+  direction or rule gets into the catalogue.
+- **The director got your story wrong?** Tell us where: the beat, the cut, the line. Those reports drive the fixes.
+- **Have a look the catalogue lacks?** Add a direction to `docs/MOTION_GRAPHICS.md` with its style frames.
+- **Fixing something?** Keep it small and add a test; `./pdd test` must pass. Pull requests from your coding agent
+  are welcome too: say what you checked.
+
+Start with the [contribution guide](CONTRIBUTING.md) and the issue forms. By participating you agree to
 the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately per the
 [security policy](SECURITY.md), never in a public issue.
 
