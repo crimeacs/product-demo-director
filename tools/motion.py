@@ -9,6 +9,7 @@
     python tools/motion.py render projects/my-film         # full render with motion blur -> out/silent.mp4
     python tools/motion.py mix projects/my-film            # music + SFX cue sheet -> out/final.mp4
     python tools/motion.py qa projects/my-film             # loudness / silence / black gates + contact sheet
+    python tools/motion.py hits projects/my-film "3:finds her"  # film time of a phrase in narration line 3
 
 See docs/MOTION_GRAPHICS.md for the method (style frames first, direction catalogue, craft rules).
 motion.json keys: film, music, musicOffsetSec, musicVolume, durationSec, fps, sub, dpr, workers, sfxDir.
@@ -37,8 +38,11 @@ def render(project, cfg, extra):
     return out
 
 
-def build_mix(silent, dur, cfg, cues, project, sfx_dir):
-    """Return (ffmpeg input args, filter_complex parts, mix labels). Pure: unit-tested."""
+def build_mix(silent, dur, cfg, cues, project, sfx_dir, vo=None):
+    """Return (ffmpeg input args, filter_complex parts, mix labels). Pure: unit-tested.
+
+    vo: optional narration, [{"t": seconds, "file": path}]. The lines are placed at their times, and the music bed
+    is ducked under them with a sidechain compressor (the music-level study puts voice ~17 dB over the bed)."""
     inputs, parts, labels, n_in = ["-i", silent], [], [], 1   # n_in counts inputs, not argv tokens
     if cfg.get("music"):
         inputs += ["-ss", str(cfg.get("musicOffsetSec", 0)), "-i", os.path.join(project, cfg["music"])]
@@ -46,6 +50,22 @@ def build_mix(silent, dur, cfg, cues, project, sfx_dir):
                      f"volume={cfg.get('musicVolume', .55)}[m]")
         labels.append("[m]")
         n_in += 1
+    if vo:
+        vlabels = []
+        for j, line in enumerate(vo):
+            ms = int(float(line["t"]) * 1000)
+            inputs += ["-i", line["file"]]
+            parts.append(f"[{n_in}:a]aresample=48000,adelay={ms}|{ms},apad=whole_dur={dur}[v{j}]")
+            vlabels.append(f"[v{j}]")
+            n_in += 1
+        parts.append("".join(vlabels) + f"amix=inputs={len(vlabels)}:normalize=0,volume={cfg.get('voVolume', 1.0)},asplit=2[vo][vosc]")
+        if "[m]" in labels:
+            parts.append(f"[m][vosc]sidechaincompress=threshold={cfg.get('duckThreshold', 0.02)}:ratio={cfg.get('duckRatio', 5)}"
+                         ":attack=40:release=450[md]")
+            labels[labels.index("[m]")] = "[md]"
+        else:
+            parts.append("[vosc]anullsink")
+        labels.append("[vo]")
     for i, c in enumerate(cues):
         ms = int(float(c["t"]) * 1000)
         inputs += ["-i", os.path.join(sfx_dir, f"{c['cue']}.mp3")]
@@ -53,6 +73,43 @@ def build_mix(silent, dur, cfg, cues, project, sfx_dir):
         labels.append(f"[s{i}]")
         n_in += 1
     return inputs, parts, labels
+
+
+def load_vo(project, cfg):
+    """Narration placement from <project>/vo/timeline.json: [{"t": seconds, "file": "vo_01.mp3"}, ...]
+    (files relative to vo/). Absent file = no narration (music + SFX only, the default for brand spots)."""
+    path = os.path.join(project, cfg.get("voTimeline", "vo/timeline.json"))
+    if not os.path.exists(path):
+        return None
+    lines = json.load(open(path))
+    out = []
+    for x in lines:
+        f = os.path.join(os.path.dirname(path), x["file"])
+        if not os.path.exists(f):
+            raise SystemExit(f"narration line {f} not found (vo/timeline.json)")
+        out.append({"t": float(x["t"]), "file": f})
+    return out
+
+
+def word_time(alignment, phrase):
+    """Start time (s) of `phrase` inside one ElevenLabs line from its character alignment, or None. Pure."""
+    text = "".join(alignment["characters"])
+    i = text.find(phrase)
+    return None if i < 0 else float(alignment["character_start_times_seconds"][i])
+
+
+def hits(project, cfg, specs):
+    """Film times of phrases in the narration, so pops and cuts land on words: `hits <project> "3:finds her"`."""
+    tl = json.load(open(os.path.join(project, cfg.get("voTimeline", "vo/timeline.json"))))
+    out = {}
+    for spec in specs:
+        n, phrase = spec.split(":", 1)
+        line = tl[int(n) - 1]
+        al = json.load(open(os.path.join(project, "vo", line["file"] + ".align.json")))
+        t = word_time(al, phrase)
+        out[spec] = None if t is None else round(float(line["t"]) + t, 2)
+    print(json.dumps(out, indent=1))
+    return out
 
 
 def mix(project, cfg):
@@ -69,7 +126,7 @@ def mix(project, cfg):
                          "(needs ELEVENLABS_API_KEY) or set motion.json sfxDir")
     if cfg.get("music") and not os.path.exists(os.path.join(project, cfg["music"])):
         raise SystemExit(f"music bed {cfg['music']} not found in {project}: generate it (see the project README) or set music to null")
-    inputs, parts, labels = build_mix(silent, dur, cfg, cues, project, sfx)
+    inputs, parts, labels = build_mix(silent, dur, cfg, cues, project, sfx, load_vo(project, cfg))
     if not labels:
         raise SystemExit("nothing to mix: set motion.json music and/or cues.json")
     parts.append("".join(labels) + f"amix=inputs={len(labels)}:normalize=0:duration=longest,atrim=0:{dur},"
@@ -166,13 +223,40 @@ def _silent_gaps(path, min_gap=1.2):
     return list(zip(st, en))
 
 
+def section_plan(cfg, length):
+    """motion.json musicSections -> an ElevenLabs music_v1 composition plan (section form). Pure: unit-tested.
+
+    Use it when the score must change on the cuts: prompt mode ignores timings in practice (asked for 62 s with
+    nine timed sections, got a flat 80 s bed), and music_v2 chunk plans rendered two sections as silence.
+    music_v1 sections played continuously with their boundaries in place (OpenPetCam film, 2026-11-03)."""
+    secs, start, out = cfg["musicSections"], 0, []
+    for i, sec in enumerate(secs):
+        end = length if i == len(secs) - 1 else float(sec["untilSec"])
+        dur = max(3000, int(round((end - start) * 1000)))           # the provider's minimum section length
+        out.append({"section_name": str(sec.get("name") or f"section {i + 1}")[:100],
+                    "positive_local_styles": list(sec.get("styles") or ["warm"]),
+                    "negative_local_styles": list(sec.get("avoid") or []) + ["vocals", "singing", "silence"],
+                    "duration_ms": dur, "lines": []})
+        start = end
+    mood = [p.strip() for p in (cfg.get("musicPrompt") or "").split(",") if p.strip()][:12]
+    return {"positive_global_styles": mood + ["instrumental"], "negative_global_styles": ["vocals", "singing", "lyrics"],
+            "sections": out}
+
+
 def gen_music(project, cfg):
-    """Music bed from motion.json musicPrompt (instrumental, prompt mode: music_v2 composition plans can open silent)."""
+    """Music bed from motion.json: musicSections (timed plan) or musicPrompt (prompt mode, music_v2)."""
     prompt, length = cfg.get("musicPrompt"), float(cfg.get("musicLengthSec", 30))
-    if not prompt:
+    if not prompt and not cfg.get("musicSections"):
         raise SystemExit("set motion.json musicPrompt (describe instrumentation, BPM and a timed structure, no artist names)")
     out = os.path.join(project, cfg.get("music") or "music.mp3")
-    _eleven("/v1/music", {"prompt": prompt, "music_length_ms": int(length * 1000), "model_id": "music_v2", "force_instrumental": True}, out)
+    if cfg.get("musicSections"):
+        _eleven("/v1/music", {"composition_plan": section_plan(cfg, length), "model_id": "music_v1"}, out)
+    else:
+        _eleven("/v1/music", {"prompt": prompt, "music_length_ms": int(length * 1000), "model_id": "music_v2", "force_instrumental": True}, out)
+    got = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out],
+                               capture_output=True, text=True).stdout.strip() or 0)
+    if got and abs(got - length) > 0.1 * length:
+        print(f"note: asked for {length:.0f}s and got {got:.0f}s; section timings may not match the edit (map the energy)")
     gaps = [g for g in _silent_gaps(out) if g[0] < length - 2]
     lead = [g for g in gaps if g[0] <= .05]
     inner = [g for g in gaps if g[0] > .05]
@@ -216,7 +300,7 @@ def new(project):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["new", "styleframes", "music", "sfx", "stills", "render", "mix", "qa", "all"])
+    ap.add_argument("cmd", choices=["new", "styleframes", "music", "sfx", "stills", "hits", "render", "mix", "qa", "all"])
     ap.add_argument("project")
     ap.add_argument("times", nargs="*")
     a = ap.parse_args()
@@ -229,6 +313,8 @@ def main():
         return gen_music(a.project, cfg)
     if a.cmd == "sfx":
         return gen_sfx(a.project, cfg)
+    if a.cmd == "hits":
+        return hits(a.project, cfg, a.times)
     if a.cmd == "stills":
         return render(a.project, cfg, ["--stills", ",".join(a.times or ["1", "5", "10"])])
     if a.cmd in ("render", "all"):
