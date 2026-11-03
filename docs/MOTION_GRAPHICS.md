@@ -89,6 +89,47 @@ film had no system. What fixed it (v1 -> v2 of the vertical test ad):
 - Negative or clever-but-empty close lines; lead with the value.
 - Claims the evidence cannot back: label illustrative checklists honestly, never invent metrics or speeds.
 
+## Narrated, footage-backed films (learned on the OpenPetCam film, 2026-11-03)
+
+A 61-second story film mixing real product footage, the product's own model output, felt-puppet B-roll and a
+narrator. The founder had asked for narration with a voice they chose; without that ask, the rules above still
+stand (no TTS narrator by default).
+
+- **Script before audio, and test it on a stranger.** A fresh reader hears it once and retells it. The first
+  draft scored 7/10 coherence and 6/10 understanding: "she" was ambiguous for ten seconds and "flashed with open
+  firmware" lost them. Fix the words before buying narration; the voice and the timeline are frozen once recorded.
+- **Tell a story, not a feature list.** One question planted in the first line ("where is she, right now?"),
+  beats linked by *but* and *therefore*, a turn near the middle, and the last line paying the first one off. A
+  fast run of extra features near the end is fine as a rhythm change, never as the spine.
+- **Talk like people talk.** Vary the subject (the camera, you, we, she). "It … it … it" in every line was the
+  founder's one note on the final cut. Read the script aloud and count pronouns.
+- **Choose the voice by measuring it.** Audition several on the same two lines and measure the pitch range: the
+  chosen voice spanned 16.4 semitones where most sat at 5-12, which is where reads sound flat and "AI".
+- **The timeline follows the voice.** Record per line with neighbouring text for continuity, then place cuts
+  between complete thoughts and land every visual hit on its word: `motion.py hits <project> "6:up"`. The status
+  pill flipping to "Active" exactly on the word "up" is the kind of sync that reads as directed.
+- **Mix:** narration placed from `vo/timeline.json` (`[{"t": 0.2, "file": "vo_01.mp3"}]`); `motion.py mix`
+  ducks the bed under it with a sidechain and normalises to -14 LUFS. No silences anywhere, sound from frame one.
+- **Music that follows the cut:** `motion.json` `musicSections` (`[{"name", "untilSec", "styles"}]`) builds a
+  music_v1 section plan. Prompt mode ignored nine timed sections (and returned 80 s for a 62 s ask); music_v2
+  chunk plans rendered two sections as silence. The gap check still runs either way.
+- **Real evidence beats illustration.** Real footage played in real time, with the product's actual detector boxes
+  and scores drawn on it (a toy at 0.00, the pet at 0.99), and a real report the agent actually fixed. Check the
+  log before captioning: a pan that looked like a "search" turned out to be unverifiable, so it was not used.
+- **B-roll for what you cannot film:** handmade felt miniatures (style `felt-miniature-2026`): keyframes from
+  GPT Image 2 with the first keyframe as the reference for the rest (the same puppet across shots), animated with
+  Cosmos image-to-video, played back at 12 fps for stop-motion. Label any animated photo of a real object as such.
+- **Grade footage per sequence, not per frame.** Fit white balance once on a settled frame and apply it to every
+  frame (per-frame fits flicker); keep clipped highlights neutral (a gain on blown sun patches turns them blue);
+  across a big exposure change, fit start and end and blend.
+- **Headless Chromium has no H.264.** Playwright's Chromium will not play an MP4 in a film page or app capture;
+  encode WebM/VP9 for anything a page must play while rendering.
+- **A logo in the hook costs viewers**, so keep an ident under two seconds, moving, with the narrator already
+  speaking. The icon pack's separate layers (ring, head, ears, face) made a playful build cheap.
+- **End on the payoff, then one bridged call to action**, and stop about a second after the last word.
+- **Deliver for the web:** `python tools/web_export.py out/final.mp4 --poster-at 24.6` writes fast-start 1080p and
+  720p MP4s, a VP9 WebM and a poster, plus the `<video>` snippet.
+
 ## Technical contract
 
 - Setup once: `cd engine && npm i -D playwright && npx playwright install chromium` (the renderer uses Node
